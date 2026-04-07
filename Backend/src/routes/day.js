@@ -45,6 +45,15 @@ router.get("/:cycleId/:dayNumber", authMiddleware, async (req, res) => {
       success: true,
       data: {
         dailyLogId: dailyLog._id,
+        videoProgress: {
+          percent: Number(dailyLog.videoProgress?.percent) || 0,
+          currentTime: Number(dailyLog.videoProgress?.currentTime) || 0,
+          duration: Number(dailyLog.videoProgress?.duration) || 0,
+          videoId: dailyLog.videoProgress?.videoId || null,
+          ended: Boolean(dailyLog.videoProgress?.ended),
+          completed: Boolean(dailyLog.videoProgress?.completed),
+          completedAt: dailyLog.videoProgress?.completedAt || null,
+        },
         dayType,
         subtopic: day.subtopicRef || resource?.subtopicTitle || "Assessment",
         tasks: normalizedTasks,

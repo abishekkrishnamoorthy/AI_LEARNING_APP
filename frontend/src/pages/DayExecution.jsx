@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getDayExecution } from '../api'
+import { completeTask, getDayExecution } from '../api'
 import DepthTask from '../components/execution/DepthTask'
 import NotesPanel from '../components/execution/NotesPanel'
 import QuizTask from '../components/execution/QuizTask'
@@ -16,6 +16,7 @@ const fetchDay = async (cycleId, dayNumber) => {
 
 function DayExecution() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { topicId, cycleId, dayNumber } = useParams()
 
   const [notesDrawerOpen, setNotesDrawerOpen] = useState(false)
@@ -44,11 +45,27 @@ function DayExecution() {
   }, [])
 
   const normalizedTasks = useMemo(() => dayData?.tasks || [], [dayData?.tasks])
-  const activeTask = normalizedTasks.find((task) => task.status === 'active')
+  const activeTask =
+    normalizedTasks.find((task) => task.status === 'active') ||
+    normalizedTasks.find((task) => task.status !== 'done')
   const currentTaskType = activeTask?.type || 'summary'
-  const doneTask = normalizedTasks.find((task) => task.type === currentTaskType && task.status === 'done')
-  const showNextButton = doneTask !== undefined
   const renderTaskType = ['practical', 'depth_question'].includes(currentTaskType) ? 'depth' : currentTaskType
+
+  const handleTaskComplete = async (taskType) => {
+    const response = await completeTask({
+      cycleId,
+      dayNumber: Number(dayNumber),
+      taskType,
+    })
+
+    return Boolean(response?.data?.success)
+  }
+
+  const refreshDay = async () => {
+    await queryClient.invalidateQueries({
+      queryKey: ['day', cycleId, Number(dayNumber)],
+    })
+  }
 
   const toggleFullscreen = async () => {
     if (document.fullscreenElement) {
@@ -103,8 +120,9 @@ function DayExecution() {
             dayNumber={parsedDayNumber}
             videoId={dayData.videoId}
             videoTitle={dayData.videoTitle}
-            onCompleted={() => {}}
-            showNextButton={showNextButton}
+            initialVideoProgress={dayData.videoProgress}
+            onCompleted={() => handleTaskComplete('video')}
+            onAdvance={refreshDay}
           />
         ) : null}
 

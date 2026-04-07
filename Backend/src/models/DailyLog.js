@@ -16,6 +16,13 @@ const DailyLogSchema = new mongoose.Schema(
     },
     videoProgress: {
       percent: { type: Number, default: 0 },
+      currentTime: { type: Number, default: 0 },
+      duration: { type: Number, default: 0 },
+      videoId: { type: String, default: "" },
+      ended: { type: Boolean, default: false },
+      completed: { type: Boolean, default: false },
+      completedAt: Date,
+      updatedAt: Date,
       markedWatchedAt: Date,
     },
     quiz: {

@@ -5,6 +5,8 @@ export const getDayExecution = (cycleId, dayNumber) => httpClient.get(`/api/day/
 
 export const completeTask = (payload) => httpClient.post('/api/task/complete', payload)
 
+export const saveVideoProgress = (payload) => httpClient.post('/api/task/video-progress', payload)
+
 export const submitQuiz = (payload) => httpClient.post('/api/task/quiz/submit', payload)
 
 export const submitDepth = (payload) => httpClient.post('/api/task/depth/submit', payload)

@@ -30,12 +30,103 @@ const parseModelJson = (raw = "{}") => {
   return JSON.parse(cleaned || "{}");
 };
 
+const VIDEO_COMPLETE_THRESHOLD = 0.95;
+
+const clampProgress = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.min(1, parsed));
+};
+
+const hasVideoCompletionSignal = (videoProgress = {}) => {
+  const percent = Number(videoProgress?.percent) || 0;
+  return percent >= VIDEO_COMPLETE_THRESHOLD || Boolean(videoProgress?.ended);
+};
+
+router.post("/video-progress", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { cycleId, dayNumber, taskType, progress, currentTime, duration, videoId, ended } = req.body;
+
+    if (taskType !== "video") {
+      return res.status(400).json({ success: false, message: "taskType must be video" });
+    }
+
+    const parsedDay = Number(dayNumber);
+    if (!Number.isInteger(parsedDay) || parsedDay < 1 || parsedDay > 5) {
+      return res.status(400).json({ success: false, message: "dayNumber must be between 1 and 5" });
+    }
+
+    const { cycle } = await findCycleAndDay({ cycleId, dayNumber: parsedDay, userId });
+    const dailyLog = await getOrCreateDailyLog({ cycle, dayNumber: parsedDay, userId });
+
+    const normalizedProgress = clampProgress(progress);
+    const normalizedCurrentTime = Math.max(0, Number(currentTime) || 0);
+    const normalizedDuration = Math.max(0, Number(duration) || 0);
+    const normalizedEnded = Boolean(ended);
+    const completed = normalizedProgress >= VIDEO_COMPLETE_THRESHOLD || normalizedEnded;
+
+    dailyLog.videoProgress = {
+      ...(dailyLog.videoProgress?.toObject?.() || {}),
+      percent: normalizedProgress,
+      currentTime: normalizedCurrentTime,
+      duration: normalizedDuration,
+      videoId: String(videoId || dailyLog.videoProgress?.videoId || ""),
+      ended: normalizedEnded,
+      completed,
+      completedAt: completed
+        ? dailyLog.videoProgress?.completedAt || new Date()
+        : dailyLog.videoProgress?.completedAt || undefined,
+      updatedAt: new Date(),
+    };
+
+    if (completed && !dailyLog.videoWatchedAt) {
+      dailyLog.videoWatchedAt = new Date();
+    }
+
+    await dailyLog.save();
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        progress: dailyLog.videoProgress.percent,
+        completed: dailyLog.videoProgress.completed,
+      },
+    });
+  } catch (error) {
+    const status = error.message?.includes("not found") ? 404 : 400;
+    return res.status(status).json({ success: false, message: error.message || "Failed to save video progress" });
+  }
+});
+
 router.post("/complete", authMiddleware, async (req, res) => {
   try {
     const userId = req.user?.id;
     const { cycleId, dayNumber, taskType } = req.body;
 
     const normalizedTaskType = taskType === "depth" ? "depth_question" : taskType;
+
+    if (normalizedTaskType === "video") {
+      const parsedDay = Number(dayNumber);
+      const { cycle } = await findCycleAndDay({ cycleId, dayNumber: parsedDay, userId });
+      const dailyLog = await getOrCreateDailyLog({ cycle, dayNumber: parsedDay, userId });
+      if (!hasVideoCompletionSignal(dailyLog.videoProgress)) {
+        return res.status(400).json({
+          success: false,
+          message: "Video completion threshold not met. Watch at least 95% or finish the video.",
+        });
+      }
+      dailyLog.videoProgress = {
+        ...(dailyLog.videoProgress?.toObject?.() || {}),
+        completed: true,
+        completedAt: dailyLog.videoProgress?.completedAt || new Date(),
+        updatedAt: new Date(),
+      };
+      if (!dailyLog.videoWatchedAt) {
+        dailyLog.videoWatchedAt = new Date();
+      }
+      await dailyLog.save();
+    }
 
     const updateResult = await Cycle.updateOne(
       { _id: cycleId, userId },

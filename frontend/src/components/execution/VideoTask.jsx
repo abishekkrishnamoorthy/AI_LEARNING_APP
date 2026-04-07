@@ -1,7 +1,6 @@
 /* eslint-disable react/prop-types */
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { completeTask } from '../../api'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { saveVideoProgress } from '../../api'
 import NotesPanel from './NotesPanel'
 
 let youtubeApiPromise
@@ -31,18 +30,97 @@ const loadYoutubeApi = () => {
   return youtubeApiPromise
 }
 
-function VideoTask({ dailyLogId, cycleId, dayNumber, videoId, videoTitle, onCompleted }) {
-  const queryClient = useQueryClient()
+function VideoTask({
+  dailyLogId,
+  cycleId,
+  dayNumber,
+  videoId,
+  videoTitle,
+  initialVideoProgress,
+  onCompleted,
+  onAdvance,
+}) {
   const [leftWidth, setLeftWidth] = useState(30)
-  const [progressPercent, setProgressPercent] = useState(0)
-  const [markedWatched, setMarkedWatched] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [progressPercent, setProgressPercent] = useState(() =>
+    Math.round((Number(initialVideoProgress?.percent) || 0) * 100)
+  )
+  const [showAlmostDone, setShowAlmostDone] = useState((Number(initialVideoProgress?.percent) || 0) >= 0.9)
+  const [isBackendCompleted, setIsBackendCompleted] = useState(false)
+  const [isCompleting, setIsCompleting] = useState(false)
+  const [isAdvancing, setIsAdvancing] = useState(false)
+  const [completionError, setCompletionError] = useState('')
 
   const dividerRef = useRef(null)
   const draggingRef = useRef(false)
   const playerRef = useRef(null)
   const progressTimerRef = useRef(null)
+  const completionRequestedRef = useRef(false)
   const playerContainerId = useMemo(() => `yt-player-${Math.random().toString(36).slice(2, 9)}`, [])
+
+  const clearProgressTimer = useCallback(() => {
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current)
+      progressTimerRef.current = null
+    }
+  }, [])
+
+  const triggerBackendCompletion = useCallback(async () => {
+    if (completionRequestedRef.current || isBackendCompleted || isCompleting) return
+    completionRequestedRef.current = true
+    setIsCompleting(true)
+    setCompletionError('')
+
+    try {
+      const ok = await onCompleted?.()
+      if (!ok) {
+        completionRequestedRef.current = false
+        setCompletionError('Unable to verify completion yet. Keep playing and try again.')
+        return
+      }
+      setIsBackendCompleted(true)
+    } catch {
+      completionRequestedRef.current = false
+      setCompletionError('Unable to verify completion yet. Keep playing and try again.')
+    } finally {
+      setIsCompleting(false)
+    }
+  }, [isBackendCompleted, isCompleting, onCompleted])
+
+  const syncProgress = useCallback(async ({ ended = false } = {}) => {
+    try {
+      const current = Math.max(0, Number(playerRef.current?.getCurrentTime?.() || 0))
+      const duration = Math.max(0, Number(playerRef.current?.getDuration?.() || 0))
+      const progress = duration > 0 ? Math.min(1, current / duration) : 0
+
+      const nextPercent = Math.min(100, Math.round(progress * 100))
+      setProgressPercent(nextPercent)
+      setShowAlmostDone(progress >= 0.9)
+
+      await saveVideoProgress({
+        cycleId,
+        dayNumber: Number(dayNumber),
+        taskType: 'video',
+        progress,
+        currentTime: current,
+        duration,
+        videoId,
+        ended,
+      })
+
+      if (ended || progress >= 0.95) {
+        await triggerBackendCompletion()
+      }
+    } catch {
+      // ignore tracking errors and keep the player responsive
+    }
+  }, [cycleId, dayNumber, triggerBackendCompletion, videoId])
+
+  useEffect(() => {
+    const initialProgress = Number(initialVideoProgress?.percent) || 0
+    if (initialProgress >= 0.95 || Boolean(initialVideoProgress?.ended)) {
+      triggerBackendCompletion()
+    }
+  }, [initialVideoProgress?.ended, initialVideoProgress?.percent, triggerBackendCompletion])
 
   useEffect(() => {
     const handleMouseMove = (event) => {
@@ -78,21 +156,22 @@ function VideoTask({ dailyLogId, cycleId, dayNumber, videoId, videoTitle, onComp
         videoId,
         playerVars: { rel: 0, modestbranding: 1 },
         events: {
-          onReady: () => {},
-          onStateChange: () => {
-            if (progressTimerRef.current) clearInterval(progressTimerRef.current)
+          onReady: () => {
+            syncProgress()
+          },
+          onStateChange: async (event) => {
+            if (event?.data === 0) {
+              setProgressPercent(100)
+              setShowAlmostDone(false)
+              await syncProgress({ ended: true })
+            }
+
+            clearProgressTimer()
+            if (event?.data !== 1) return
+
             progressTimerRef.current = setInterval(() => {
-              try {
-                const current = Number(playerRef.current?.getCurrentTime?.() || 0)
-                const duration = Number(playerRef.current?.getDuration?.() || 0)
-                if (duration > 0) {
-                  const nextPercent = Math.min(100, Math.round((current / duration) * 100))
-                  setProgressPercent(nextPercent)
-                }
-              } catch {
-                // ignore
-              }
-            }, 5000)
+              syncProgress()
+            }, 3000)
           },
         },
       })
@@ -102,29 +181,18 @@ function VideoTask({ dailyLogId, cycleId, dayNumber, videoId, videoTitle, onComp
 
     return () => {
       isMounted = false
-      if (progressTimerRef.current) clearInterval(progressTimerRef.current)
+      clearProgressTimer()
       if (playerRef.current?.destroy) playerRef.current.destroy()
     }
-  }, [playerContainerId, videoId])
+  }, [clearProgressTimer, playerContainerId, syncProgress, videoId])
 
-  const canProceed = progressPercent >= 80 || markedWatched
-
-  const handleComplete = async () => {
-    if (!canProceed || isSubmitting) return
-    setIsSubmitting(true)
-
+  const handleAdvance = async () => {
+    if (!isBackendCompleted || isAdvancing) return
+    setIsAdvancing(true)
     try {
-      const response = await completeTask({
-        cycleId,
-        dayNumber: Number(dayNumber),
-        taskType: 'video',
-      })
-      if (response?.data?.success) {
-        await queryClient.invalidateQueries({ queryKey: ['day', cycleId, Number(dayNumber)] })
-        onCompleted?.(response?.data?.nextTask || 'quiz')
-      }
+      await onAdvance?.()
     } finally {
-      setIsSubmitting(false)
+      setIsAdvancing(false)
     }
   }
 
@@ -154,26 +222,25 @@ function VideoTask({ dailyLogId, cycleId, dayNumber, videoId, videoTitle, onComp
           </div>
 
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-slate-600">Progress: {progressPercent}%</p>
+            <div>
+              <p className="text-sm text-slate-600">Progress: {progressPercent}%</p>
+              {showAlmostDone && !isBackendCompleted ? (
+                <p className="text-xs text-[var(--cta)]">Video almost completed</p>
+              ) : null}
+              {completionError ? <p className="text-xs text-red-600">{completionError}</p> : null}
+            </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setMarkedWatched(true)}
-                disabled={markedWatched}
-                style={{ opacity: markedWatched ? 0.5 : 1 }}
-                className="rounded-xl border border-[var(--bgray)] px-3 py-2 text-sm"
-              >
-                {markedWatched ? 'Marked as watched' : 'Mark as watched'}
-              </button>
-              <button
-                type="button"
-                onClick={handleComplete}
-                disabled={!canProceed || isSubmitting}
-                style={{ opacity: canProceed ? 1 : 0.4, cursor: canProceed ? 'pointer' : 'default' }}
-                className="rounded-xl bg-[var(--cta)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--cta-hover)] disabled:opacity-60"
-              >
-                {isSubmitting ? 'Submitting...' : 'Next -> Quiz'}
-              </button>
+              {isCompleting ? <p className="text-xs text-slate-500">Verifying completion...</p> : null}
+              {isBackendCompleted ? (
+                <button
+                  type="button"
+                  onClick={handleAdvance}
+                  disabled={isAdvancing}
+                  className="rounded-xl bg-[var(--cta)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--cta-hover)] disabled:opacity-60"
+                >
+                  {isAdvancing ? 'Loading quiz...' : 'Next -> Quiz'}
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
