@@ -1,0 +1,29 @@
+{
+  "name": "ai_learning_tool-backend",
+  "version": "0.1.0",
+  "description": "Backend sandbox for AI Learning Tool",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^4.18.2",
+    "google-auth-library": "^10.6.2",
+    "googleapis": "^171.4.0",
+    "groq-sdk": "^0.30.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.23.0",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  },
+  "keywords": []
+}

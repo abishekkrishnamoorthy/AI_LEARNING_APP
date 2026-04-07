@@ -1,0 +1,158 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useNavigate, useParams } from 'react-router-dom'
+import { getDayExecution } from '../api'
+import DepthTask from '../components/execution/DepthTask'
+import NotesPanel from '../components/execution/NotesPanel'
+import QuizTask from '../components/execution/QuizTask'
+import SummaryPage from '../components/execution/SummaryPage'
+import TaskTopBar from '../components/execution/TaskTopBar'
+import VideoTask from '../components/execution/VideoTask'
+
+const fetchDay = async (cycleId, dayNumber) => {
+  const response = await getDayExecution(cycleId, dayNumber)
+  return response?.data?.data
+}
+
+function DayExecution() {
+  const navigate = useNavigate()
+  const { topicId, cycleId, dayNumber } = useParams()
+
+  const [notesDrawerOpen, setNotesDrawerOpen] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement))
+  const parsedDayNumber = Number(dayNumber)
+
+  const {
+    data: dayData,
+    isLoading: loading,
+  } = useQuery({
+    queryKey: ['day', cycleId, parsedDayNumber],
+    queryFn: () => fetchDay(cycleId, parsedDayNumber),
+    enabled: Boolean(cycleId && Number.isFinite(parsedDayNumber)),
+  })
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement))
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
+  }, [])
+
+  const normalizedTasks = useMemo(() => dayData?.tasks || [], [dayData?.tasks])
+  const activeTask = normalizedTasks.find((task) => task.status === 'active')
+  const currentTaskType = activeTask?.type || 'summary'
+  const doneTask = normalizedTasks.find((task) => task.type === currentTaskType && task.status === 'done')
+  const showNextButton = doneTask !== undefined
+  const renderTaskType = ['practical', 'depth_question'].includes(currentTaskType) ? 'depth' : currentTaskType
+
+  const toggleFullscreen = async () => {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen()
+      return
+    }
+    await document.documentElement.requestFullscreen()
+  }
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-[var(--bg)] p-5">
+        <div className="mx-auto max-w-7xl animate-pulse rounded-3xl border border-[var(--bgray)] bg-white p-8">
+          <div className="h-8 w-80 rounded bg-[var(--lgray)]" />
+          <div className="mt-3 h-4 w-52 rounded bg-[var(--lgray)]" />
+          <div className="mt-6 h-72 rounded-xl bg-[var(--lgray)]" />
+        </div>
+      </main>
+    )
+  }
+
+  if (!dayData) {
+    return (
+      <main className="min-h-screen bg-[var(--bg)] p-5">
+        <div className="mx-auto max-w-3xl rounded-3xl border border-[var(--bgray)] bg-white p-6 shadow-sm">
+          <p className="text-sm text-red-600">Unable to load this day.</p>
+        </div>
+      </main>
+    )
+  }
+
+  return (
+    <main className="min-h-screen bg-[var(--bg)] p-4 md:p-6">
+      <div className="mx-auto max-w-7xl space-y-4">
+        <TaskTopBar
+          topicId={topicId}
+          cycleId={cycleId}
+          dayNumber={Number(dayNumber)}
+          dayType={dayData.dayType}
+          tasks={normalizedTasks}
+          onBack={() => navigate('/home')}
+          onToggleNotes={() => setNotesDrawerOpen((prev) => !prev)}
+          onToggleAI={() => setAiOpen((prev) => !prev)}
+          onToggleFullscreen={toggleFullscreen}
+          isFullscreen={isFullscreen}
+        />
+
+        {renderTaskType === 'video' ? (
+          <VideoTask
+            dailyLogId={dayData.dailyLogId}
+            cycleId={cycleId}
+            dayNumber={parsedDayNumber}
+            videoId={dayData.videoId}
+            videoTitle={dayData.videoTitle}
+            onCompleted={() => {}}
+            showNextButton={showNextButton}
+          />
+        ) : null}
+
+        {renderTaskType === 'quiz' ? (
+          <QuizTask
+            dailyLogId={dayData.dailyLogId}
+            cycleId={cycleId}
+            dayNumber={parsedDayNumber}
+            questions={dayData.questions || []}
+            notesOpen={notesDrawerOpen}
+            onToggleNotes={() => setNotesDrawerOpen((prev) => !prev)}
+            onCompleted={() => {}}
+          />
+        ) : null}
+
+        {renderTaskType === 'depth' ? (
+          <DepthTask
+            dailyLogId={dayData.dailyLogId}
+            cycleId={cycleId}
+            dayNumber={parsedDayNumber}
+            depthQuestion={dayData.depthQuestion}
+            practicalTask={dayData.practicalTask}
+            isAIOpen={aiOpen}
+            onToggleAI={() => setAiOpen((prev) => !prev)}
+            onCompleted={() => {}}
+          />
+        ) : null}
+
+        {renderTaskType === 'summary' ? (
+          <SummaryPage
+            dailyLogId={dayData.dailyLogId}
+            dayNumber={parsedDayNumber}
+            onStartNextDay={() => navigate(`/topic/${topicId}/cycle/${cycleId}/day/${parsedDayNumber + 1}`)}
+            onViewCycleReport={() => navigate('/home')}
+          />
+        ) : null}
+      </div>
+
+      {renderTaskType !== 'video' ? (
+        <NotesPanel
+          dailyLogId={dayData.dailyLogId}
+          mode="drawer"
+          isOpen={notesDrawerOpen}
+          onClose={() => setNotesDrawerOpen(false)}
+        />
+      ) : null}
+    </main>
+  )
+}
+
+export default DayExecution

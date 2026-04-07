@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+frontend/dist/
+frontend/temp-build-check/
+frontend/temp-build-check-execution/
+
+# Logs
+*.log
+Backend/server.out.log
+Backend/server.err.log
+
+# Env files
+.env
+**/.env
+!.env.example
+**/.env.example
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
