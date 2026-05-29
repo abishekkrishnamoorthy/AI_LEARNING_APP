@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import Editor from '@monaco-editor/react'
 import { getChatHistory, streamChatMessage, submitDepth, submitPractical } from '../../api'
+import NotesPanel from './NotesPanel'
 
 function DepthTask({
   dailyLogId,
@@ -28,6 +29,7 @@ function DepthTask({
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [messages, setMessages] = useState([])
+  const [showNotes, setShowNotes] = useState(false)
 
   useEffect(() => {
     setCode(practicalTask?.starterCode || '')
@@ -132,6 +134,23 @@ function DepthTask({
   return (
     <section className="relative rounded-3xl border border-[var(--bgray)] bg-white p-6 shadow-sm">
       <p className="text-xs uppercase tracking-wide text-slate-500">Task 3: Depth + Practical + AI Chat</p>
+      <div className="mt-2 flex items-center justify-end">
+        <button
+          type="button"
+          onClick={() => setShowNotes((prev) => !prev)}
+          style={{
+            padding: '5px 11px',
+            background: showNotes ? '#E6E6FA' : '#F5F5F5',
+            color: showNotes ? '#7B5EA7' : '#666',
+            border: '1px solid #E0E0E0',
+            borderRadius: '8px',
+            fontSize: '11px',
+            cursor: 'pointer',
+          }}
+        >
+          {showNotes ? 'Hide notes' : 'See notes'}
+        </button>
+      </div>
 
       <div className="mt-4 space-y-5">
         <article className="rounded-2xl border border-[var(--bgray)] p-4">
@@ -286,6 +305,8 @@ function DepthTask({
           </div>
         </div>
       ) : null}
+
+      {showNotes ? <NotesPanel cycleId={cycleId} dayNumber={dayNumber} mode="drawer" /> : null}
     </section>
   )
 }

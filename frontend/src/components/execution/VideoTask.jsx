@@ -203,7 +203,7 @@ function VideoTask({
 
       <div className="mt-4 flex min-h-[500px] overflow-hidden rounded-2xl border border-[var(--bgray)]">
         <div style={{ width: `${leftWidth}%` }} className="h-full min-h-[500px] bg-[var(--lgray)] p-3">
-          <NotesPanel dailyLogId={dailyLogId} mode="panel" />
+          <NotesPanel cycleId={cycleId} dayNumber={dayNumber} mode="panel" />
         </div>
 
         <button

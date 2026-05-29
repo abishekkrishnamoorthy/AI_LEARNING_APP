@@ -4,12 +4,13 @@ import { useQueryClient } from '@tanstack/react-query'
 import { submitQuiz } from '../../api'
 import NotesPanel from './NotesPanel'
 
-function QuizTask({ dailyLogId, cycleId, dayNumber, questions = [], notesOpen, onToggleNotes, onCompleted }) {
+function QuizTask({ cycleId, dayNumber, questions = [], onCompleted }) {
   const queryClient = useQueryClient()
   const [index, setIndex] = useState(0)
   const [answersMap, setAnswersMap] = useState({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [result, setResult] = useState(null)
+  const [showNotes, setShowNotes] = useState(false)
 
   const current = questions[index]
 
@@ -85,7 +86,7 @@ function QuizTask({ dailyLogId, cycleId, dayNumber, questions = [], notesOpen, o
   }
 
   return (
-    <section className="rounded-3xl border border-[var(--bgray)] bg-white p-6 shadow-sm">
+    <section className="relative rounded-3xl border border-[var(--bgray)] bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-wide text-slate-500">Task 2: Quiz</p>
@@ -93,10 +94,18 @@ function QuizTask({ dailyLogId, cycleId, dayNumber, questions = [], notesOpen, o
         </div>
         <button
           type="button"
-          onClick={onToggleNotes}
-          className="rounded-xl border border-[var(--bgray)] px-3 py-2 text-sm"
+          onClick={() => setShowNotes((prev) => !prev)}
+          style={{
+            padding: '5px 11px',
+            background: showNotes ? '#E6E6FA' : '#F5F5F5',
+            color: showNotes ? '#7B5EA7' : '#666',
+            border: '1px solid #E0E0E0',
+            borderRadius: '8px',
+            fontSize: '11px',
+            cursor: 'pointer',
+          }}
         >
-          Notes
+          {showNotes ? 'Hide notes' : 'See notes'}
         </button>
       </div>
 
@@ -152,7 +161,7 @@ function QuizTask({ dailyLogId, cycleId, dayNumber, questions = [], notesOpen, o
         )}
       </div>
 
-      <NotesPanel dailyLogId={dailyLogId} mode="drawer" isOpen={notesOpen} onClose={onToggleNotes} />
+      {showNotes ? <NotesPanel cycleId={cycleId} dayNumber={dayNumber} mode="drawer" /> : null}
     </section>
   )
 }

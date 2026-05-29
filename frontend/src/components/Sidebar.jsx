@@ -6,6 +6,7 @@ const MENU_ITEMS = [
   { label: 'Home', to: '/home' },
   { label: 'My topics', to: '/topics', showCount: true },
   { label: 'Continue Learning', to: '/continue' },
+  { label: 'Notes', to: '/notes' },
   { label: 'Documents', to: '/documents' },
   { label: 'Profile', to: '/profile' },
 ]
@@ -62,6 +63,7 @@ function Sidebar({ topicCount = 0, onNavigate }) {
         <button type="button" className="lf-logout-btn" onClick={handleLogout}>
           Logout
         </button>
+        <h2>BETA</h2>
       </div>
     </aside>
   )

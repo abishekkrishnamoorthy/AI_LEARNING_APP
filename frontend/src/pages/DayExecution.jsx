@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { completeTask, getDayExecution } from '../api'
 import DepthTask from '../components/execution/DepthTask'
-import NotesPanel from '../components/execution/NotesPanel'
 import QuizTask from '../components/execution/QuizTask'
 import SummaryPage from '../components/execution/SummaryPage'
 import TaskTopBar from '../components/execution/TaskTopBar'
@@ -19,7 +18,6 @@ function DayExecution() {
   const queryClient = useQueryClient()
   const { topicId, cycleId, dayNumber } = useParams()
 
-  const [notesDrawerOpen, setNotesDrawerOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement))
   const parsedDayNumber = Number(dayNumber)
@@ -107,7 +105,6 @@ function DayExecution() {
           dayType={dayData.dayType}
           tasks={normalizedTasks}
           onBack={() => navigate('/home')}
-          onToggleNotes={() => setNotesDrawerOpen((prev) => !prev)}
           onToggleAI={() => setAiOpen((prev) => !prev)}
           onToggleFullscreen={toggleFullscreen}
           isFullscreen={isFullscreen}
@@ -128,12 +125,9 @@ function DayExecution() {
 
         {renderTaskType === 'quiz' ? (
           <QuizTask
-            dailyLogId={dayData.dailyLogId}
             cycleId={cycleId}
             dayNumber={parsedDayNumber}
             questions={dayData.questions || []}
-            notesOpen={notesDrawerOpen}
-            onToggleNotes={() => setNotesDrawerOpen((prev) => !prev)}
             onCompleted={() => {}}
           />
         ) : null}
@@ -154,21 +148,15 @@ function DayExecution() {
         {renderTaskType === 'summary' ? (
           <SummaryPage
             dailyLogId={dayData.dailyLogId}
+            topicId={topicId}
+            cycleId={cycleId}
             dayNumber={parsedDayNumber}
+            subtopic={dayData.subtopic}
             onStartNextDay={() => navigate(`/topic/${topicId}/cycle/${cycleId}/day/${parsedDayNumber + 1}`)}
             onViewCycleReport={() => navigate('/home')}
           />
         ) : null}
       </div>
-
-      {renderTaskType !== 'video' ? (
-        <NotesPanel
-          dailyLogId={dayData.dailyLogId}
-          mode="drawer"
-          isOpen={notesDrawerOpen}
-          onClose={() => setNotesDrawerOpen(false)}
-        />
-      ) : null}
     </main>
   )
 }

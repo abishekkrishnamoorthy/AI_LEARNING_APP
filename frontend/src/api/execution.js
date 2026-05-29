@@ -13,6 +13,8 @@ export const submitDepth = (payload) => httpClient.post('/api/task/depth/submit'
 
 export const submitPractical = (payload) => httpClient.post('/api/task/practical/submit', payload)
 
+export const saveSummaryNotes = (payload) => httpClient.post('/api/notes/save', payload)
+
 export const getNotes = (dailyLogId) => httpClient.get(`/api/notes/${dailyLogId}`)
 
 export const saveNotes = (dailyLogId, content) => httpClient.put(`/api/notes/${dailyLogId}`, { content })

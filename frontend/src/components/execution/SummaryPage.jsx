@@ -1,10 +1,27 @@
-/* eslint-disable react/prop-types */
+﻿/* eslint-disable react/prop-types */
 import { useEffect, useMemo, useState } from 'react'
-import { generateSummary, getNotes, getSummary } from '../../api'
+import { generateSummary, getSummary, getTopics } from '../../api'
+import { useDraftNotes } from '../../hooks/useDraftNotes'
+import { getAuthToken } from '../../utils/authStorage'
 
-function SummaryPage({ dailyLogId, dayNumber, onStartNextDay, onViewCycleReport }) {
+function SummaryPage({
+  dailyLogId,
+  topicId,
+  cycleId,
+  dayNumber,
+  subtopic,
+  onStartNextDay,
+  onViewCycleReport,
+}) {
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [topicName, setTopicName] = useState('')
+  const [cycleNumber, setCycleNumber] = useState(1)
+  const [noteSaved, setNoteSaved] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+
+  const { getDraft, clearDraft } = useDraftNotes(cycleId, dayNumber)
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
 
   useEffect(() => {
     if (!dailyLogId) return
@@ -12,6 +29,27 @@ function SummaryPage({ dailyLogId, dayNumber, onStartNextDay, onViewCycleReport 
       // Queue may already have a job for this log.
     })
   }, [dailyLogId])
+
+  useEffect(() => {
+    if (!topicId) return
+
+    const loadTopicMeta = async () => {
+      try {
+        const response = await getTopics()
+        const topics = response?.data?.data || []
+        const topic = topics.find((item) => String(item?._id) === String(topicId))
+        if (!topic) return
+
+        setTopicName(topic?.name || '')
+        const activeCycleNumber = Number(topic?.currentCycle?.cycleNumber || 1)
+        setCycleNumber(Number.isFinite(activeCycleNumber) ? activeCycleNumber : 1)
+      } catch {
+        // Keep fallbacks for save payload.
+      }
+    }
+
+    loadTopicMeta()
+  }, [topicId])
 
   useEffect(() => {
     if (!dailyLogId) return
@@ -49,9 +87,8 @@ function SummaryPage({ dailyLogId, dayNumber, onStartNextDay, onViewCycleReport 
   const circumference = 2 * Math.PI * 42
   const dashOffset = circumference - (Math.max(0, Math.min(100, combinedScore)) / 100) * circumference
 
-  const handleDownloadNotes = async () => {
-    const response = await getNotes(dailyLogId)
-    const content = response?.data?.data?.content || ''
+  const handleDownloadNotes = () => {
+    const content = getDraft()
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -59,6 +96,42 @@ function SummaryPage({ dailyLogId, dayNumber, onStartNextDay, onViewCycleReport 
     link.download = `day-${dayNumber}-notes.txt`
     link.click()
     URL.revokeObjectURL(url)
+  }
+
+  const handleSaveNotes = async () => {
+    if (isSaving) return
+    setIsSaving(true)
+    const draft = getDraft()
+
+    try {
+      const token = getAuthToken()
+      const response = await fetch(`${apiBaseUrl}/api/notes/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          topicId,
+          topicName: topicName || `Topic-${String(topicId || '').slice(0, 6)}`,
+          cycleId,
+          cycleNumber: Number(cycleNumber) || 1,
+          dayNumber: Number(dayNumber),
+          subtopic: subtopic || 'Learning session',
+          content: draft,
+          aiSummary: (summary?.keyToRemember || []).join(' | ') || '',
+          takeaways: Array.isArray(summary?.takeaways) ? summary.takeaways : [],
+        }),
+      })
+      if (!response.ok) throw new Error('Save failed')
+      clearDraft()
+      setNoteSaved(true)
+    } catch (error) {
+      console.error('Note save error:', error)
+      alert('Could not save notes. Please try again.')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   if (loading) {
@@ -83,6 +156,49 @@ function SummaryPage({ dailyLogId, dayNumber, onStartNextDay, onViewCycleReport 
             <li key={`takeaway-${idx}`}>{item}</li>
           ))}
         </ul>
+
+        <div
+          style={{
+            marginTop: '20px',
+            padding: '16px',
+            background: '#F4F3FA',
+            borderRadius: '12px',
+            border: '1px solid #E0E0E0',
+            fontFamily: 'DM Sans, sans-serif',
+          }}
+        >
+          <div style={{ fontSize: '13px', fontWeight: 500, color: '#1A1A1A', marginBottom: '6px' }}>
+            Save your notes
+          </div>
+          <div style={{ fontSize: '11px', color: '#888', marginBottom: '12px', lineHeight: 1.5 }}>
+            Your draft notes + AI summary will be saved permanently to your Notes page for future reference.
+          </div>
+          {noteSaved ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#1D9E75' }}>
+              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#1D9E75' }} />
+              Notes saved to your Documents
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSaveNotes}
+              disabled={isSaving}
+              style={{
+                padding: '8px 20px',
+                background: isSaving ? '#C8B8F0' : '#7B5EA7',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '9px',
+                fontSize: '12px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              {isSaving ? 'Saving...' : 'Save notes to Documents'}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -131,7 +247,10 @@ function SummaryPage({ dailyLogId, dayNumber, onStartNextDay, onViewCycleReport 
         <h3 className="font-heading text-xl text-[var(--dark)]">Key to Remember</h3>
         <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-3">
           {(summary?.keyToRemember || []).map((item, idx) => (
-            <article key={`remember-${idx}`} className="rounded-xl border-l-4 border-[var(--palm)] bg-[var(--lgray)] p-3 text-sm text-[var(--dark)]">
+            <article
+              key={`remember-${idx}`}
+              className="rounded-xl border-l-4 border-[var(--palm)] bg-[var(--lgray)] p-3 text-sm text-[var(--dark)]"
+            >
               {item}
             </article>
           ))}

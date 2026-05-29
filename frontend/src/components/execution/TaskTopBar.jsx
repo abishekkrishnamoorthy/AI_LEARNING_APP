@@ -21,7 +21,6 @@ function TaskTopBar({
   dayType,
   tasks,
   onBack,
-  onToggleNotes,
   onToggleAI,
   onToggleFullscreen,
   isFullscreen,
@@ -57,13 +56,6 @@ function TaskTopBar({
           <span className="rounded-full bg-[var(--lpurple)] px-3 py-1 text-xs font-semibold text-[var(--dark)]">
             {dayTypeLabel[dayType] || 'Learning Day'}
           </span>
-          <button
-            type="button"
-            onClick={onToggleNotes}
-            className="rounded-xl border border-[var(--bgray)] px-3 py-2 text-sm text-[var(--dark)]"
-          >
-            Notes
-          </button>
           <button
             type="button"
             onClick={onToggleAI}

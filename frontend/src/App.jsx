@@ -4,9 +4,9 @@ import ProtectedRoute from './components/ProtectedRoute.jsx'
 import ContinuePage from './pages/ContinuePage.jsx'
 import CreateTopic from './pages/CreateTopic.jsx'
 import DayExecution from './pages/DayExecution.jsx'
-import DocumentsPage from './pages/DocumentsPage.jsx'
 import HomePageV2 from './pages/HomePageV2.jsx'
 import LoginPage from './pages/LoginPage.jsx'
+import NotesPage from './pages/NotesPage.jsx'
 import NotFoundPage from './pages/NotFoundPage.jsx'
 import ProfilePage from './pages/ProfilePage.jsx'
 import ProfileSetupPage from './pages/ProfileSetupPage.jsx'
@@ -39,13 +39,14 @@ function App() {
         element={<Navigate to="/home" replace />}
       />
       <Route
-        path="/documents"
+        path="/notes"
         element={
           <ProtectedRoute>
-            <DocumentsPage />
+            <NotesPage />
           </ProtectedRoute>
         }
       />
+      <Route path="/documents" element={<Navigate to="/notes" replace />} />
       <Route
         path="/continue"
         element={
