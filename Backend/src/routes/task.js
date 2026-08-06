@@ -31,6 +31,7 @@ const parseModelJson = (raw = "{}") => {
 };
 
 const VIDEO_COMPLETE_THRESHOLD = 0.95;
+const VIDEO_REMAINING_COMPLETE_SECONDS = 120;
 
 const clampProgress = (value) => {
   const parsed = Number(value);
@@ -40,7 +41,14 @@ const clampProgress = (value) => {
 
 const hasVideoCompletionSignal = (videoProgress = {}) => {
   const percent = Number(videoProgress?.percent) || 0;
-  return percent >= VIDEO_COMPLETE_THRESHOLD || Boolean(videoProgress?.ended);
+  const currentTime = Number(videoProgress?.currentTime) || 0;
+  const duration = Number(videoProgress?.duration) || 0;
+  const remainingSeconds = duration > 0 ? duration - currentTime : Number.POSITIVE_INFINITY;
+  return (
+    percent >= VIDEO_COMPLETE_THRESHOLD ||
+    Boolean(videoProgress?.ended) ||
+    remainingSeconds <= VIDEO_REMAINING_COMPLETE_SECONDS
+  );
 };
 
 router.post("/video-progress", authMiddleware, async (req, res) => {
@@ -64,7 +72,15 @@ router.post("/video-progress", authMiddleware, async (req, res) => {
     const normalizedCurrentTime = Math.max(0, Number(currentTime) || 0);
     const normalizedDuration = Math.max(0, Number(duration) || 0);
     const normalizedEnded = Boolean(ended);
-    const completed = normalizedProgress >= VIDEO_COMPLETE_THRESHOLD || normalizedEnded;
+    const remainingSeconds =
+      normalizedDuration > 0 ? normalizedDuration - normalizedCurrentTime : Number.POSITIVE_INFINITY;
+    const wasCompleted = Boolean(dailyLog.videoProgress?.completed);
+    const wasEnded = Boolean(dailyLog.videoProgress?.ended);
+    const completed =
+      wasCompleted ||
+      normalizedProgress >= VIDEO_COMPLETE_THRESHOLD ||
+      normalizedEnded ||
+      remainingSeconds <= VIDEO_REMAINING_COMPLETE_SECONDS;
 
     dailyLog.videoProgress = {
       ...(dailyLog.videoProgress?.toObject?.() || {}),
@@ -72,7 +88,7 @@ router.post("/video-progress", authMiddleware, async (req, res) => {
       currentTime: normalizedCurrentTime,
       duration: normalizedDuration,
       videoId: String(videoId || dailyLog.videoProgress?.videoId || ""),
-      ended: normalizedEnded,
+      ended: wasEnded || normalizedEnded,
       completed,
       completedAt: completed
         ? dailyLog.videoProgress?.completedAt || new Date()
@@ -113,7 +129,7 @@ router.post("/complete", authMiddleware, async (req, res) => {
       if (!hasVideoCompletionSignal(dailyLog.videoProgress)) {
         return res.status(400).json({
           success: false,
-          message: "Video completion threshold not met. Watch at least 95% or finish the video.",
+          message: "Video completion threshold not met. Watch at least 95%, finish the video, or reach the last 2 minutes.",
         });
       }
       dailyLog.videoProgress = {

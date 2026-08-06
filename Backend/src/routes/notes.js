@@ -19,6 +19,159 @@ const normalizeTakeaways = (value) => {
 
 const isBlank = (value) => value === undefined || value === null || String(value).trim() === "";
 
+const drawSectionTitle = (doc, title) => {
+  doc.moveDown(0.8);
+  doc.font("Helvetica-Bold").fontSize(12).fillColor("#7B5EA7").text(title);
+  doc.moveDown(0.35);
+};
+
+const normalizeInlineMarkdown = (line = "") =>
+  String(line)
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/_([^_]+)_/g, "$1")
+    .replace(/`([^`]+)`/g, "$1");
+
+const ensurePdfSpace = (doc, needed = 48) => {
+  if (doc.y + needed > doc.page.height - doc.page.margins.bottom) {
+    doc.addPage();
+  }
+};
+
+const renderMarkdownPdf = (doc, markdown = "") => {
+  const lines = String(markdown || "").split(/\r?\n/);
+  let inCodeBlock = false;
+
+  lines.forEach((rawLine) => {
+    const line = String(rawLine || "");
+    const trimmed = line.trim();
+    ensurePdfSpace(doc, 36);
+
+    if (trimmed.startsWith("```")) {
+      inCodeBlock = !inCodeBlock;
+      if (inCodeBlock) {
+        doc.moveDown(0.25);
+      } else {
+        doc.moveDown(0.45);
+      }
+      return;
+    }
+
+    if (inCodeBlock) {
+      doc
+        .font("Courier")
+        .fontSize(9)
+        .fillColor("#1A1A1A")
+        .text(line || " ", { lineGap: 3 });
+      return;
+    }
+
+    if (!trimmed) {
+      doc.moveDown(0.45);
+      return;
+    }
+
+    if (/^---+$/.test(trimmed)) {
+      const y = doc.y + 4;
+      doc.moveTo(doc.page.margins.left, y).lineTo(doc.page.width - doc.page.margins.right, y).strokeColor("#E0E0E0").stroke();
+      doc.moveDown(0.9);
+      return;
+    }
+
+    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      const level = heading[1].length;
+      const size = level === 1 ? 17 : level === 2 ? 14 : 12;
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(size)
+        .fillColor(level === 1 ? "#1A1A1A" : "#7B5EA7")
+        .text(normalizeInlineMarkdown(heading[2]), { lineGap: 4 });
+      doc.moveDown(0.2);
+      return;
+    }
+
+    const quote = trimmed.match(/^>\s*(.+)$/);
+    if (quote) {
+      doc
+        .font("Helvetica-Oblique")
+        .fontSize(10)
+        .fillColor("#555")
+        .text(`| ${normalizeInlineMarkdown(quote[1])}`, { indent: 10, lineGap: 4 });
+      doc.moveDown(0.2);
+      return;
+    }
+
+    const bullet = trimmed.match(/^[-*]\s+(.+)$/);
+    if (bullet) {
+      doc
+        .font("Helvetica")
+        .fontSize(10)
+        .fillColor("#1A1A1A")
+        .text(`- ${normalizeInlineMarkdown(bullet[1])}`, { indent: 12, lineGap: 4 });
+      return;
+    }
+
+    const numbered = trimmed.match(/^\d+\.\s+(.+)$/);
+    if (numbered) {
+      doc
+        .font("Helvetica")
+        .fontSize(10)
+        .fillColor("#1A1A1A")
+        .text(`${trimmed.match(/^\d+/)?.[0] || "1"}. ${normalizeInlineMarkdown(numbered[1])}`, {
+          indent: 12,
+          lineGap: 4,
+        });
+      return;
+    }
+
+    doc.font("Helvetica").fontSize(10).fillColor("#1A1A1A").text(normalizeInlineMarkdown(line), { lineGap: 4 });
+  });
+};
+
+const renderNotePdfContent = (doc, note) => {
+  doc.font("Helvetica-Bold").fontSize(20).fillColor("#1A1A1A").text(note.topicName || "Learning Notes");
+  doc.moveDown(0.2);
+  doc.font("Helvetica-Bold").fontSize(15).fillColor("#7B5EA7").text(note.subtopic || "Learning session");
+  doc.moveDown(0.25);
+  doc
+    .font("Helvetica")
+    .fontSize(9)
+    .fillColor("#666")
+    .text(
+      `Day ${note.dayNumber || "-"} | Cycle ${note.cycleNumber || "-"} | Saved ${new Date(
+        note.savedAt || Date.now()
+      ).toDateString()}`
+    );
+
+  drawSectionTitle(doc, "My notes");
+  renderMarkdownPdf(doc, note.content || "No notes text saved.");
+
+  drawSectionTitle(doc, "AI summary");
+  renderMarkdownPdf(doc, note.aiSummary || "No AI summary saved.");
+
+  drawSectionTitle(doc, "Key takeaways");
+  if (note.takeaways?.length) {
+    renderMarkdownPdf(doc, note.takeaways.map((item) => `- ${item}`).join("\n"));
+  } else {
+    renderMarkdownPdf(doc, "No takeaways saved.");
+  }
+};
+
+const streamNotesPdf = ({ res, filename, notes }) => {
+  const doc = new PDFDocument({ margin: 50, size: "A4" });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${sanitizeFilename(filename)}.pdf"`);
+  doc.pipe(res);
+
+  notes.forEach((note, index) => {
+    if (index > 0) doc.addPage();
+    renderNotePdfContent(doc, note);
+  });
+
+  doc.end();
+};
+
 router.post("/save", authMiddleware, async (req, res) => {
   try {
     const {
@@ -141,6 +294,63 @@ router.get("/download/txt/:noteId", authMiddleware, async (req, res) => {
   }
 });
 
+router.get("/download/pdf/note/:noteId", authMiddleware, async (req, res) => {
+  try {
+    const { noteId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(noteId)) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    const note = await Note.findOne({ _id: noteId, userId: req.user._id });
+    if (!note) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    streamNotesPdf({
+      res,
+      filename: `${note.topicName}-day${note.dayNumber}-notes`,
+      notes: [note],
+    });
+    return undefined;
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "Failed to download PDF" });
+  }
+});
+
+router.post("/download/pdf/draft", authMiddleware, async (req, res) => {
+  try {
+    const {
+      topicName = "Learning Notes",
+      cycleNumber = 1,
+      dayNumber,
+      subtopic = "Learning session",
+      content = "",
+      aiSummary = "",
+      takeaways = [],
+    } = req.body || {};
+
+    const note = {
+      topicName: String(topicName || "Learning Notes"),
+      cycleNumber: Number(cycleNumber) || 1,
+      dayNumber: Number(dayNumber) || "-",
+      subtopic: String(subtopic || "Learning session"),
+      content: String(content || ""),
+      aiSummary: String(aiSummary || ""),
+      takeaways: normalizeTakeaways(takeaways),
+      savedAt: new Date(),
+    };
+
+    streamNotesPdf({
+      res,
+      filename: `${note.topicName}-day${note.dayNumber}-draft-notes`,
+      notes: [note],
+    });
+    return undefined;
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "Failed to download PDF" });
+  }
+});
+
 router.get("/download/pdf/:topicId", authMiddleware, async (req, res) => {
   try {
     const { topicId } = req.params;
@@ -153,44 +363,11 @@ router.get("/download/pdf/:topicId", authMiddleware, async (req, res) => {
       return res.status(404).json({ error: "Not found" });
     }
 
-    const topicName = notes[0]?.topicName || "notes";
-    const doc = new PDFDocument({ margin: 50 });
-
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="${sanitizeFilename(topicName)}-all-notes.pdf"`);
-
-    doc.pipe(res);
-    doc.fontSize(20).fillColor("#1A1A1A").text(topicName, { align: "center" });
-    doc.moveDown();
-
-    notes.forEach((note, index) => {
-      doc.fontSize(14).fillColor("#7B5EA7").text(`Day ${note.dayNumber} — ${note.subtopic}`);
-      doc
-        .fontSize(10)
-        .fillColor("#888")
-        .text(`Cycle ${note.cycleNumber} · ${new Date(note.savedAt).toDateString()}`);
-      doc.moveDown(0.5);
-      doc.fontSize(11).fillColor("#1A1A1A").text(note.content || "");
-      doc.moveDown();
-
-      if (note.aiSummary) {
-        doc.fontSize(10).fillColor("#444").text(`AI Summary: ${note.aiSummary}`);
-        doc.moveDown();
-      }
-
-      if (note.takeaways?.length) {
-        doc.fontSize(10).fillColor("#7B5EA7").text("Key Takeaways:");
-        note.takeaways.forEach((item) => {
-          doc.fontSize(10).fillColor("#444").text(`• ${item}`);
-        });
-      }
-
-      if (index < notes.length - 1) {
-        doc.addPage();
-      }
+    streamNotesPdf({
+      res,
+      filename: `${notes[0]?.topicName || "notes"}-all-notes`,
+      notes,
     });
-
-    doc.end();
     return undefined;
   } catch (error) {
     return res.status(500).json({ error: error.message || "Failed to download PDF" });

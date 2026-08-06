@@ -25,15 +25,39 @@ if (!process.env.GROQ_API_KEY) {
 const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || "0.0.0.0";
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 app.use(
   cors({
-    origin: "*",
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("Not allowed by CORS"));
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 app.use(express.json());
+
+const healthCheck = (req, res) => {
+  res.status(200).json({
+    success: true,
+    status: "ok",
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+};
+
+app.get("/health", healthCheck);
+app.get("/api/health", healthCheck);
+
 app.use("/auth", authRoutes);
 app.use("/user", userRoutes);
 app.use("/topic", topicRoutes);

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { getUserProfile, loginUser, oauthLogin, registerUser } from '../api'
+import { getRegistrationAvailability, getUserProfile, loginUser, oauthLogin, registerUser } from '../api'
 import { VerifyPanel } from '../components'
 import fallbackLogo from '../assets/react.svg'
 import { getAuthToken, setAuthToken, setAuthUser } from '../utils/authStorage'
@@ -21,6 +21,10 @@ const GOOGLE_SCRIPT_SRC = 'https://accounts.google.com/gsi/client'
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 const CURRENT_ORIGIN =
   typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'unknown-origin'
+const REGISTRATION_LIMIT_MESSAGE =
+  'Prototype registration limit has been reached. This demo currently supports only 10 registered users.'
+const REGISTRATION_LIMIT_POPUP_MESSAGE =
+  'This prototype demo currently supports only 10 registered users. Registration is temporarily closed, but existing users can still log in and continue learning.'
 
 const getGoogleIdentity = () => {
   if (typeof window === 'undefined') {
@@ -42,6 +46,11 @@ function LoginPage() {
   const [showVerify, setShowVerify] = useState(false)
   const [verifyEmail, setVerifyEmail] = useState('')
   const [isGoogleScriptReady, setIsGoogleScriptReady] = useState(Boolean(getGoogleIdentity()))
+  const [registrationAvailability, setRegistrationAvailability] = useState({
+    available: true,
+    message: '',
+  })
+  const [showRegistrationLimitModal, setShowRegistrationLimitModal] = useState(false)
   const googleInitializedRef = useRef(false)
 
   useEffect(() => {
@@ -57,6 +66,30 @@ function LoginPage() {
     }
   }, [location, navigate])
 
+  useEffect(() => {
+    let isMounted = true
+
+    const loadRegistrationAvailability = async () => {
+      try {
+        const response = await getRegistrationAvailability()
+        if (!isMounted) return
+        setRegistrationAvailability({
+          available: response?.data?.available !== false,
+          message: response?.data?.message || '',
+        })
+      } catch {
+        if (!isMounted) return
+        setRegistrationAvailability({ available: true, message: '' })
+      }
+    }
+
+    loadRegistrationAvailability()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
   const title = useMemo(() => {
     return authMode === 'login' ? 'Welcome back' : 'Create your account'
   }, [authMode])
@@ -66,6 +99,15 @@ function LoginPage() {
       ? 'Login to continue your learning workflow.'
       : 'Register and verify your email to get started.'
   }, [authMode])
+
+  const isRegistrationClosed = registrationAvailability.available === false
+  const registrationLimitMessage = registrationAvailability.message || REGISTRATION_LIMIT_MESSAGE
+  const isRegisterMode = authMode === 'register'
+  const isGoogleDisabled = isSubmitting || (isRegisterMode && isRegistrationClosed)
+
+  const showLimitPopup = () => {
+    setShowRegistrationLimitModal(true)
+  }
 
   const redirectAfterAuth = async () => {
     const profileResponse = await getUserProfile()
@@ -102,6 +144,9 @@ function LoginPage() {
         setAuthToken(token)
         await redirectAfterAuth()
       } catch (error) {
+        if (error?.response?.status === 403 && error?.response?.data?.message === REGISTRATION_LIMIT_MESSAGE) {
+          showLimitPopup()
+        }
         setStatus({
           type: 'error',
           message: error?.response?.data?.message || 'Google login failed. Please try again.',
@@ -184,6 +229,11 @@ function LoginPage() {
   }, [initializeGoogleIdentity, isGoogleScriptReady])
 
   const onGoogleLogin = () => {
+    if (isRegisterMode && isRegistrationClosed) {
+      showLimitPopup()
+      return
+    }
+
     if (!GOOGLE_CLIENT_ID) {
       setStatus({
         type: 'error',
@@ -262,6 +312,11 @@ function LoginPage() {
     event.preventDefault()
     setStatus({ type: '', message: '' })
 
+    if (isRegistrationClosed) {
+      showLimitPopup()
+      return
+    }
+
     const email = registerForm.email.trim()
     const password = registerForm.password
     const confirm = registerForm.confirm
@@ -287,6 +342,9 @@ function LoginPage() {
       setVerifyEmail(email)
       setShowVerify(true)
     } catch (error) {
+      if (error?.response?.status === 403 && error?.response?.data?.message === REGISTRATION_LIMIT_MESSAGE) {
+        showLimitPopup()
+      }
       setStatus({
         type: 'error',
         message: error?.response?.data?.message || 'Registration failed. Please try again.',
@@ -322,10 +380,13 @@ function LoginPage() {
           <h2 id="auth-title" className="auth-title">{title}</h2>
           <p className="auth-subtitle">{subtitle}</p>
 
-          <button type="button" className="btn btn-google" onClick={onGoogleLogin} disabled={isSubmitting}>
+          <button type="button" className="btn btn-google" onClick={onGoogleLogin} disabled={isGoogleDisabled}>
             <span className="google-icon" aria-hidden="true">G</span>
             Sign in with Google
           </button>
+          {isRegisterMode && isRegistrationClosed ? (
+            <p className="status status-error">Registration is closed for this prototype. Existing users can still log in.</p>
+          ) : null}
 
           <div className="auth-divider" role="separator" aria-label="or">
             <span>OR</span>
@@ -404,9 +465,12 @@ function LoginPage() {
                 />
               </div>
 
-              <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
+              <button className="btn btn-primary" type="submit" disabled={isSubmitting || isRegistrationClosed}>
                 {isSubmitting ? 'Registering...' : 'Register'}
               </button>
+              {isRegistrationClosed ? (
+                <p className="status status-error">This prototype is full. Please use an existing account to log in.</p>
+              ) : null}
             </form>
           )}
 
@@ -426,6 +490,31 @@ function LoginPage() {
       </section>
       {showVerify ? (
         <VerifyPanel email={verifyEmail} onVerified={handleVerifySuccess} onClose={() => setShowVerify(false)} />
+      ) : null}
+      {showRegistrationLimitModal ? (
+        <div
+          className="verify-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="registration-limit-title"
+          onClick={() => setShowRegistrationLimitModal(false)}
+        >
+          <section className="verify-panel" onClick={(event) => event.stopPropagation()}>
+            <h2 id="registration-limit-title">Prototype User Limit Reached</h2>
+            <p>{REGISTRATION_LIMIT_POPUP_MESSAGE}</p>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                setShowRegistrationLimitModal(false)
+                setAuthMode('login')
+                setStatus({ type: '', message: '' })
+              }}
+            >
+              Back to Login
+            </button>
+          </section>
+        </div>
       ) : null}
     </main>
   )

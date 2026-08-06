@@ -39,13 +39,16 @@ function VideoTask({
   initialVideoProgress,
   onCompleted,
   onAdvance,
+  onRegisterProgressSaver,
 }) {
   const [leftWidth, setLeftWidth] = useState(30)
   const [progressPercent, setProgressPercent] = useState(() =>
     Math.round((Number(initialVideoProgress?.percent) || 0) * 100)
   )
   const [showAlmostDone, setShowAlmostDone] = useState((Number(initialVideoProgress?.percent) || 0) >= 0.9)
-  const [isBackendCompleted, setIsBackendCompleted] = useState(false)
+  const [isBackendCompleted, setIsBackendCompleted] = useState(
+    Boolean(initialVideoProgress?.completed) || Boolean(initialVideoProgress?.ended)
+  )
   const [isCompleting, setIsCompleting] = useState(false)
   const [isAdvancing, setIsAdvancing] = useState(false)
   const [completionError, setCompletionError] = useState('')
@@ -91,12 +94,13 @@ function VideoTask({
       const current = Math.max(0, Number(playerRef.current?.getCurrentTime?.() || 0))
       const duration = Math.max(0, Number(playerRef.current?.getDuration?.() || 0))
       const progress = duration > 0 ? Math.min(1, current / duration) : 0
+      const remainingSeconds = duration > 0 ? duration - current : Number.POSITIVE_INFINITY
 
       const nextPercent = Math.min(100, Math.round(progress * 100))
       setProgressPercent(nextPercent)
-      setShowAlmostDone(progress >= 0.9)
+      setShowAlmostDone(progress >= 0.9 || remainingSeconds <= 120)
 
-      await saveVideoProgress({
+      const response = await saveVideoProgress({
         cycleId,
         dayNumber: Number(dayNumber),
         taskType: 'video',
@@ -107,7 +111,7 @@ function VideoTask({
         ended,
       })
 
-      if (ended || progress >= 0.95) {
+      if (ended || progress >= 0.95 || remainingSeconds <= 120 || response?.data?.data?.completed) {
         await triggerBackendCompletion()
       }
     } catch {
@@ -116,11 +120,33 @@ function VideoTask({
   }, [cycleId, dayNumber, triggerBackendCompletion, videoId])
 
   useEffect(() => {
+    onRegisterProgressSaver?.(() => syncProgress())
+    return () => {
+      onRegisterProgressSaver?.(null)
+    }
+  }, [onRegisterProgressSaver, syncProgress])
+
+  useEffect(() => {
     const initialProgress = Number(initialVideoProgress?.percent) || 0
-    if (initialProgress >= 0.95 || Boolean(initialVideoProgress?.ended)) {
+    const initialCurrent = Number(initialVideoProgress?.currentTime) || 0
+    const initialDuration = Number(initialVideoProgress?.duration) || 0
+    const initialRemaining = initialDuration > 0 ? initialDuration - initialCurrent : Number.POSITIVE_INFINITY
+    if (
+      initialProgress >= 0.95 ||
+      Boolean(initialVideoProgress?.ended) ||
+      Boolean(initialVideoProgress?.completed) ||
+      initialRemaining <= 120
+    ) {
       triggerBackendCompletion()
     }
-  }, [initialVideoProgress?.ended, initialVideoProgress?.percent, triggerBackendCompletion])
+  }, [
+    initialVideoProgress?.completed,
+    initialVideoProgress?.currentTime,
+    initialVideoProgress?.duration,
+    initialVideoProgress?.ended,
+    initialVideoProgress?.percent,
+    triggerBackendCompletion,
+  ])
 
   useEffect(() => {
     const handleMouseMove = (event) => {
@@ -201,8 +227,8 @@ function VideoTask({
       <p className="text-xs uppercase tracking-wide text-slate-500">Task 1: Video + Notes</p>
       <h2 className="mt-1 font-heading text-2xl text-[var(--dark)]">{videoTitle || 'Today video'}</h2>
 
-      <div className="mt-4 flex min-h-[500px] overflow-hidden rounded-2xl border border-[var(--bgray)]">
-        <div style={{ width: `${leftWidth}%` }} className="h-full min-h-[500px] bg-[var(--lgray)] p-3">
+      <div className="mt-4 flex h-[660px] max-h-[calc(100vh-260px)] min-h-[540px] overflow-hidden rounded-2xl border border-[var(--bgray)]">
+        <div style={{ width: `${leftWidth}%` }} className="h-full min-h-0 bg-[var(--lgray)] p-3">
           <NotesPanel cycleId={cycleId} dayNumber={dayNumber} mode="panel" />
         </div>
 
@@ -216,7 +242,7 @@ function VideoTask({
           aria-label="Resize notes panel"
         />
 
-        <div style={{ width: `${100 - leftWidth}%` }} className="min-h-[500px] p-3">
+        <div style={{ width: `${100 - leftWidth}%` }} className="h-full min-h-0 p-3">
           <div className="h-full rounded-xl border border-[var(--bgray)] bg-black">
             <div id={playerContainerId} className="h-[420px] w-full" />
           </div>

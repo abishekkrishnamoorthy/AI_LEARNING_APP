@@ -7,11 +7,36 @@ import User from "../models/User.js";
 import { sendVerificationEmail } from "../services/emailService.js";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DEFAULT_MAX_USERS = 10;
+const REGISTRATION_LIMIT_MESSAGE =
+  "Prototype registration limit has been reached. This demo currently supports only 10 registered users.";
 
 const normalizeEmail = (email) => email.trim().toLowerCase();
 
 const isValidEmail = (email) => EMAIL_REGEX.test(email);
 const googleClient = new OAuth2Client();
+
+const getMaxUsers = () => {
+  const parsed = Number(process.env.MAX_USERS || DEFAULT_MAX_USERS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_USERS;
+};
+
+const getRegistrationAvailability = async () => {
+  const maxUsers = getMaxUsers();
+  const currentUsers = await User.countDocuments();
+  const available = currentUsers < maxUsers;
+  return {
+    available,
+    maxUsers,
+    currentUsers,
+    ...(available ? {} : { message: REGISTRATION_LIMIT_MESSAGE }),
+  };
+};
+
+const sendRegistrationLimitResponse = (res) =>
+  res.status(403).json({
+    message: REGISTRATION_LIMIT_MESSAGE,
+  });
 
 const toUserResponse = (user) => ({
   id: user._id,
@@ -46,6 +71,11 @@ export const registerUser = async (req, res) => {
 
     if (existingUser) {
       return res.status(400).json({ message: "Email already exists" });
+    }
+
+    const availability = await getRegistrationAvailability();
+    if (!availability.available) {
+      return sendRegistrationLimitResponse(res);
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -111,6 +141,11 @@ export const verifyEmail = async (req, res) => {
     if (existingUser) {
       await TempUser.deleteOne({ _id: tempUser._id });
       return res.status(200).json({ message: "Email verified successfully" });
+    }
+
+    const availability = await getRegistrationAvailability();
+    if (!availability.available) {
+      return sendRegistrationLimitResponse(res);
     }
 
     await User.create({
@@ -222,6 +257,11 @@ export const oauthLogin = async (req, res) => {
       user.lastLogin = new Date();
       await user.save();
     } else {
+      const availability = await getRegistrationAvailability();
+      if (!availability.available) {
+        return sendRegistrationLimitResponse(res);
+      }
+
       user = await User.create({
         email,
         oauthProvider: "google",
@@ -264,6 +304,15 @@ export const getCurrentUser = async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ message: "Failed to fetch user profile", error: error.message });
+  }
+};
+
+export const registrationAvailability = async (req, res) => {
+  try {
+    const availability = await getRegistrationAvailability();
+    return res.status(200).json(availability);
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to check registration availability", error: error.message });
   }
 };
 

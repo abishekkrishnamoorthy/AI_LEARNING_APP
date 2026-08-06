@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 const readDraft = (key) => {
   if (typeof window === 'undefined') return ''
@@ -7,18 +7,15 @@ const readDraft = (key) => {
 
 export function useDraftNotes(cycleId, dayNumber) {
   const key = `draft_notes_${cycleId}_${dayNumber}`
-  const debounceRef = useRef(null)
 
   const [content, setContent] = useState(() => readDraft(key))
 
   const updateContent = useCallback(
     (text) => {
       setContent(text)
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-      debounceRef.current = setTimeout(() => {
-        if (typeof window === 'undefined') return
+      if (typeof window !== 'undefined') {
         window.localStorage.setItem(key, text)
-      }, 1000)
+      }
     },
     [key]
   )
@@ -35,13 +32,6 @@ export function useDraftNotes(cycleId, dayNumber) {
   useEffect(() => {
     setContent(readDraft(key))
   }, [key])
-
-  useEffect(
-    () => () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-    },
-    []
-  )
 
   return { content, updateContent, clearDraft, getDraft }
 }

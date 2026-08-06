@@ -1,6 +1,6 @@
 ﻿/* eslint-disable react/prop-types */
 import { useEffect, useMemo, useState } from 'react'
-import { generateSummary, getSummary, getTopics } from '../../api'
+import { generateSummary, getSummary, getTopics, saveSummaryNotes } from '../../api'
 import { useDraftNotes } from '../../hooks/useDraftNotes'
 import { getAuthToken } from '../../utils/authStorage'
 
@@ -19,6 +19,7 @@ function SummaryPage({
   const [cycleNumber, setCycleNumber] = useState(1)
   const [noteSaved, setNoteSaved] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   const { getDraft, clearDraft } = useDraftNotes(cycleId, dayNumber)
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
@@ -87,48 +88,65 @@ function SummaryPage({
   const circumference = 2 * Math.PI * 42
   const dashOffset = circumference - (Math.max(0, Math.min(100, combinedScore)) / 100) * circumference
 
-  const handleDownloadNotes = () => {
-    const content = getDraft()
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `day-${dayNumber}-notes.txt`
-    link.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const handleSaveNotes = async () => {
-    if (isSaving) return
-    setIsSaving(true)
-    const draft = getDraft()
-
+  const handleDownloadPdf = async () => {
     try {
       const token = getAuthToken()
-      const response = await fetch(`${apiBaseUrl}/api/notes/save`, {
+      const response = await fetch(`${apiBaseUrl}/api/notes/download/pdf/draft`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          topicId,
           topicName: topicName || `Topic-${String(topicId || '').slice(0, 6)}`,
-          cycleId,
           cycleNumber: Number(cycleNumber) || 1,
           dayNumber: Number(dayNumber),
           subtopic: subtopic || 'Learning session',
-          content: draft,
+          content: getDraft(),
           aiSummary: (summary?.keyToRemember || []).join(' | ') || '',
           takeaways: Array.isArray(summary?.takeaways) ? summary.takeaways : [],
         }),
       })
-      if (!response.ok) throw new Error('Save failed')
+      if (!response.ok) throw new Error('PDF download failed')
+
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `day-${dayNumber}-notes.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('PDF download error:', error)
+      alert('Could not download PDF. Please try again.')
+    }
+  }
+
+  const handleSaveNotes = async () => {
+    if (isSaving) return
+    setIsSaving(true)
+    setSaveError('')
+    const draft = getDraft()
+
+    try {
+      await saveSummaryNotes({
+        topicId,
+        topicName: topicName || `Topic-${String(topicId || '').slice(0, 6)}`,
+        cycleId,
+        cycleNumber: Number(cycleNumber) || 1,
+        dayNumber: Number(dayNumber),
+        subtopic: subtopic || 'Learning session',
+        content: draft,
+        aiSummary: (summary?.keyToRemember || []).join(' | ') || '',
+        takeaways: Array.isArray(summary?.takeaways) ? summary.takeaways : [],
+      })
       clearDraft()
       setNoteSaved(true)
     } catch (error) {
       console.error('Note save error:', error)
-      alert('Could not save notes. Please try again.')
+      setSaveError(error?.response?.data?.error || 'Could not save notes. Your draft is still safe locally.')
     } finally {
       setIsSaving(false)
     }
@@ -198,6 +216,9 @@ function SummaryPage({
               {isSaving ? 'Saving...' : 'Save notes to Documents'}
             </button>
           )}
+          {saveError ? (
+            <div style={{ marginTop: '10px', fontSize: '12px', lineHeight: 1.45, color: '#B54747' }}>{saveError}</div>
+          ) : null}
         </div>
       </div>
 
@@ -266,10 +287,10 @@ function SummaryPage({
       <div className="mt-6 flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={handleDownloadNotes}
+          onClick={handleDownloadPdf}
           className="rounded-xl border border-[var(--bgray)] px-4 py-2 text-sm font-medium text-[var(--dark)]"
         >
-          Download notes as .txt
+          Download PDF
         </button>
 
         {Number(dayNumber) < 5 ? (

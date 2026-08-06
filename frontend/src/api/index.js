@@ -1,6 +1,7 @@
 import httpClient from '../services/httpClient'
 import {
   checkVerifyStatus,
+  getRegistrationAvailability,
   getCurrentUser,
   loginUser,
   logoutUser,
@@ -35,6 +36,7 @@ export {
   getChatHistory,
   getDayExecution,
   getNotes,
+  getRegistrationAvailability,
   getSummary,
   getTopicStatus,
   getTopics,

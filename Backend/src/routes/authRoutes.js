@@ -5,6 +5,7 @@ import {
   loginUser,
   logoutUser,
   oauthLogin,
+  registrationAvailability,
   registerUser,
   resendVerificationEmail,
   verifyEmail,
@@ -14,6 +15,7 @@ import authMiddleware from "../middlewares/authMiddleware.js";
 const router = express.Router();
 
 router.post("/register", registerUser);
+router.get("/registration-availability", registrationAvailability);
 router.get("/verify", verifyEmail);
 router.post("/login", loginUser);
 router.post("/oauth", oauthLogin);

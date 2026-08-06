@@ -1,6 +1,7 @@
 import httpClient from '../services/httpClient'
 
 export const registerUser = (payload) => httpClient.post('/auth/register', payload)
+export const getRegistrationAvailability = () => httpClient.get('/auth/registration-availability')
 export const loginUser = (payload) => httpClient.post('/auth/login', payload)
 export const oauthLogin = (payload) => httpClient.post('/auth/oauth', payload)
 export const getCurrentUser = (token) =>

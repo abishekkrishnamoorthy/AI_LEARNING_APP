@@ -4,8 +4,12 @@ const getMissingBrevoConfig = () => {
 };
 
 export const sendVerificationEmail = async (email, token) => {
-  const backendBaseUrl = process.env.BACKEND_BASE_URL || "http://0.0.0.0:5000";
-  const verificationLink = `${backendBaseUrl}/auth/verify?token=${token}`;
+  const verificationBaseUrl = (
+    process.env.EMAIL_VERIFICATION_BASE_URL ||
+    process.env.BACKEND_BASE_URL ||
+    "http://0.0.0.0:5000"
+  ).replace(/\/+$/, "");
+  const verificationLink = `${verificationBaseUrl}/auth/verify?token=${encodeURIComponent(token)}`;
   const missingConfig = getMissingBrevoConfig();
 
   if (missingConfig.length > 0) {

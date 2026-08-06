@@ -21,6 +21,12 @@ function TaskTopBar({
   dayType,
   tasks,
   onBack,
+  showBack = true,
+  nextLabel = 'Next',
+  canGoNext = false,
+  nextDisabledReason = '',
+  onNext,
+  onExitLearning,
   onToggleAI,
   onToggleFullscreen,
   isFullscreen,
@@ -40,13 +46,15 @@ function TaskTopBar({
     <header className="rounded-3xl border border-[var(--bgray)] bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <button
-            type="button"
-            onClick={onBack}
-            className="rounded-xl border border-[var(--bgray)] px-3 py-1 text-sm font-medium text-[var(--dark)]"
-          >
-            Back
-          </button>
+          {showBack ? (
+            <button
+              type="button"
+              onClick={onBack}
+              className="rounded-xl border border-[var(--bgray)] px-3 py-1 text-sm font-medium text-[var(--dark)]"
+            >
+              Back
+            </button>
+          ) : null}
           <p className="mt-2 text-sm text-slate-600">
             Topic {topicId.slice(0, 6)}... / Cycle {cycleId.slice(0, 6)}... / Day {dayNumber}
           </p>
@@ -63,6 +71,38 @@ function TaskTopBar({
           >
             AI
           </button>
+          <button
+            type="button"
+            onClick={onExitLearning}
+            className="rounded-xl border border-[var(--bgray)] px-3 py-2 text-sm font-semibold text-[var(--dark)]"
+          >
+            Exit Learning
+          </button>
+          {nextDisabledReason || canGoNext ? (
+            <span
+              className="group relative inline-flex"
+              title={canGoNext ? nextLabel : nextDisabledReason}
+              tabIndex={canGoNext ? -1 : 0}
+            >
+              <button
+                type="button"
+                onClick={canGoNext ? onNext : undefined}
+                disabled={!canGoNext}
+                className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
+                  canGoNext
+                    ? 'border-[var(--cta)] bg-[var(--cta)] text-white hover:bg-[var(--cta-hover)]'
+                    : 'border-[var(--bgray)] bg-[var(--lgray)] text-slate-500 opacity-55 shadow-none hover:translate-y-0'
+                }`}
+              >
+                {nextLabel}
+              </button>
+              {!canGoNext && nextDisabledReason ? (
+                <span className="pointer-events-none absolute right-0 top-full z-30 mt-2 hidden w-max max-w-56 rounded-lg border border-[var(--bgray)] bg-white px-3 py-2 text-xs font-medium text-[var(--dark)] shadow-lg group-hover:block group-focus:block">
+                  {nextDisabledReason}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
           <button
             type="button"
             onClick={onToggleFullscreen}

@@ -50,32 +50,30 @@ function NotesPage() {
     }
   }, [notes, selectedNote?._id])
 
-  const downloadTxt = (note) => {
+  const downloadNotePdf = async (note) => {
     if (!note) return
 
-    const text = [
-      `Topic: ${note.topicName}`,
-      `Day ${note.dayNumber} · Cycle ${note.cycleNumber}`,
-      `Subtopic: ${note.subtopic}`,
-      `Saved: ${new Date(note.savedAt).toDateString()}`,
-      '',
-      '--- MY NOTES ---',
-      note.content || '',
-      '',
-      '--- AI SUMMARY ---',
-      note.aiSummary || '',
-      '',
-      '--- KEY TAKEAWAYS ---',
-      (note.takeaways || []).map((item, index) => `${index + 1}. ${item}`).join('\n'),
-    ].join('\n')
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/notes/download/pdf/note/${note._id}`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      })
+      if (!response.ok) throw new Error('PDF download failed')
 
-    const blob = new Blob([text], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `${note.topicName}-day${note.dayNumber}-notes.txt`
-    anchor.click()
-    URL.revokeObjectURL(url)
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${note.topicName}-day${note.dayNumber}-notes.pdf`
+      document.body.appendChild(anchor)
+      anchor.click()
+      document.body.removeChild(anchor)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('PDF download error:', error)
+      alert('Could not download PDF. Please try again.')
+    }
   }
 
   const downloadTopicPdf = async (topicId, topicName) => {
@@ -237,22 +235,7 @@ function NotesPage() {
                 <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <button
                     type="button"
-                    onClick={() => downloadTxt(selectedNote)}
-                    style={{
-                      padding: '7px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #E0E0E0',
-                      background: '#F5F5F5',
-                      color: '#1A1A1A',
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Download .txt
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => downloadTopicPdf(selectedNote.topicId, selectedNote.topicName)}
+                    onClick={() => downloadNotePdf(selectedNote)}
                     style={{
                       padding: '7px 12px',
                       borderRadius: '8px',

@@ -4,10 +4,10 @@ import { useQueryClient } from '@tanstack/react-query'
 import { submitQuiz } from '../../api'
 import NotesPanel from './NotesPanel'
 
-function QuizTask({ cycleId, dayNumber, questions = [], onCompleted }) {
+function QuizTask({ cycleId, dayNumber, questions = [], quizState, onQuizStateChange, onCompleted }) {
   const queryClient = useQueryClient()
-  const [index, setIndex] = useState(0)
-  const [answersMap, setAnswersMap] = useState({})
+  const index = quizState?.index || 0
+  const answersMap = quizState?.answersMap || {}
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [result, setResult] = useState(null)
   const [showNotes, setShowNotes] = useState(false)
@@ -26,12 +26,21 @@ function QuizTask({ cycleId, dayNumber, questions = [], onCompleted }) {
   const handleSelect = (selected) => {
     if (!current) return
     const questionId = String(current._id || index)
-    setAnswersMap((prev) => ({ ...prev, [questionId]: selected }))
+    onQuizStateChange?.({
+      index,
+      answersMap: { ...answersMap, [questionId]: selected },
+    })
   }
 
   const handleNext = () => {
     if (index < questions.length - 1) {
-      setIndex((prev) => prev + 1)
+      onQuizStateChange?.({ index: index + 1, answersMap })
+    }
+  }
+
+  const handlePrevious = () => {
+    if (index > 0) {
+      onQuizStateChange?.({ index: index - 1, answersMap })
     }
   }
 
@@ -137,8 +146,13 @@ function QuizTask({ cycleId, dayNumber, questions = [], onCompleted }) {
       </article>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-        <button type="button" disabled className="rounded-xl border border-[var(--bgray)] px-3 py-2 text-sm opacity-60">
-          Previous Disabled
+        <button
+          type="button"
+          onClick={handlePrevious}
+          disabled={index === 0}
+          className="rounded-xl border border-[var(--bgray)] px-3 py-2 text-sm disabled:opacity-60"
+        >
+          Previous
         </button>
 
         {index < questions.length - 1 ? (
