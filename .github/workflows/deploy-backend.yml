@@ -1,60 +1,113 @@
-name: Deploy Backend to EC2
+name: Deploy Backend
 
 on:
   push:
     branches:
       - main
+    paths:
+      - "Backend/**"
 
 jobs:
-  deploy-backend:
-    name: Deploy Backend
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Start deployment
-        run: |
-          echo "Starting backend deployment to EC2"
-          echo "Branch: ${GITHUB_REF_NAME}"
-          echo "Commit: ${GITHUB_SHA}"
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.2.5
+      - name: Deployment Information
+        run: |
+          echo "========================================"
+          echo "🚀 GitHub Actions Deployment Started"
+          echo "========================================"
+          echo "Repository : $GITHUB_REPOSITORY"
+          echo "Branch     : $GITHUB_REF_NAME"
+          echo "Commit SHA : $GITHUB_SHA"
+          echo "Actor      : $GITHUB_ACTOR"
+          echo "Triggered  : $(date)"
+          echo "========================================"
+
+      - name: Deploy Backend to EC2
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          command_timeout: 10m
           script: |
-            set -euo pipefail
+            set -e
 
-            echo "Connected to EC2"
-            echo "Navigating to backend directory"
-            cd ~/AI_LEARNING_APP/Backend
+            echo "========================================"
+            echo "✅ Connected to EC2"
+            echo "========================================"
 
-            echo "Updating repository"
+            echo "Current User:"
+            whoami
+
+            echo "Current Directory:"
+            pwd
+
+            echo "Changing to project directory..."
+            cd /home/ubuntu/AI_LEARNING_APP/Backend
+
+            echo "Current Directory:"
+            pwd
+
+            echo "Listing project files..."
+            ls -lah
+
+            echo "========================================"
+            echo "Current Git Status"
+            echo "========================================"
+            git status
+
+            echo "Fetching latest code..."
             git fetch origin
-            git reset --hard origin/main
 
-            echo "Current deployed commit:"
-            git rev-parse --short HEAD
+            echo "Pulling latest code..."
+            git pull origin main
 
-            echo "Installing backend dependencies"
+            echo "Latest Commit:"
+            git log -1 --oneline
+
+            echo "========================================"
+            echo "Node Environment"
+            echo "========================================"
+            node -v
+            npm -v
+
+            echo "Installing dependencies..."
             npm install
 
-            echo "Restarting PM2 process"
+            echo "========================================"
+            echo "PM2 Status Before Restart"
+            echo "========================================"
+            pm2 list || true
+
             if pm2 describe learnflow-backend > /dev/null 2>&1; then
+              echo "Restarting existing PM2 process..."
               pm2 restart learnflow-backend --update-env
             else
+              echo "PM2 process not found. Starting new process..."
               pm2 start src/server.js --name learnflow-backend
             fi
 
-            echo "Saving PM2 process list"
+            echo "Saving PM2 process list..."
             pm2 save
 
-            echo "PM2 status"
-            pm2 status learnflow-backend
+            echo "========================================"
+            echo "PM2 Status After Restart"
+            echo "========================================"
+            pm2 list
 
-            echo "Backend deployment completed successfully"
+            echo "Application Logs (Last 20 Lines)"
+            pm2 logs learnflow-backend --lines 20 --nostream || true
 
-      - name: Deployment complete
-        run: echo "Backend deployment workflow completed successfully"
+            echo "========================================"
+            echo "Deployment Completed Successfully"
+            echo "========================================"
+
+      - name: Deployment Completed
+        run: |
+          echo "========================================"
+          echo "✅ GitHub Actions Workflow Finished"
+          echo "========================================"
