@@ -1,0 +1,60 @@
+name: Deploy Backend to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Start deployment
+        run: |
+          echo "Starting backend deployment to EC2"
+          echo "Branch: ${GITHUB_REF_NAME}"
+          echo "Commit: ${GITHUB_SHA}"
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            set -euo pipefail
+
+            echo "Connected to EC2"
+            echo "Navigating to backend directory"
+            cd ~/AI_LEARNING_APP/Backend
+
+            echo "Updating repository"
+            git fetch origin
+            git reset --hard origin/main
+
+            echo "Current deployed commit:"
+            git rev-parse --short HEAD
+
+            echo "Installing backend dependencies"
+            npm install
+
+            echo "Restarting PM2 process"
+            if pm2 describe learnflow-backend > /dev/null 2>&1; then
+              pm2 restart learnflow-backend --update-env
+            else
+              pm2 start src/server.js --name learnflow-backend
+            fi
+
+            echo "Saving PM2 process list"
+            pm2 save
+
+            echo "PM2 status"
+            pm2 status learnflow-backend
+
+            echo "Backend deployment completed successfully"
+
+      - name: Deployment complete
+        run: echo "Backend deployment workflow completed successfully"
