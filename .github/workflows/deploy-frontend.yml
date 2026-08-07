@@ -1,0 +1,159 @@
+name: LearnFlow Frontend CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    name: 🚀 Build & Deploy Frontend
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 🔍 Workflow Information
+        run: |
+          echo "=========================================="
+          echo "🚀 LearnFlow Frontend CI/CD Started"
+          echo "=========================================="
+
+          echo "Repository : ${{ github.repository }}"
+          echo "Branch     : ${{ github.ref_name }}"
+          echo "Actor      : ${{ github.actor }}"
+          echo "Commit SHA : ${{ github.sha }}"
+          echo "Runner OS  : $RUNNER_OS"
+
+          echo ""
+          echo "Current Directory"
+          pwd
+
+          echo ""
+          echo "Node Version"
+          node -v
+
+          echo ""
+          echo "NPM Version"
+          npm -v
+
+          echo "=========================================="
+
+      - name: 📂 Show Frontend Files
+        run: |
+          echo "Frontend Folder"
+          pwd
+          ls -lah
+
+      - name: 📦 Install Dependencies
+        run: |
+          echo "Installing Packages..."
+          npm ci
+
+          if [ $? -ne 0 ]; then
+            echo "❌ npm install Failed"
+            exit 1
+          fi
+
+          echo "✅ Dependencies Installed"
+
+      - name: 🏗️ Build Frontend
+        run: |
+          echo "Building Production Files..."
+
+          npm run build
+
+          if [ $? -ne 0 ]; then
+            echo "❌ Build Failed"
+            exit 1
+          fi
+
+          echo "✅ Build Successful"
+
+      - name: 📂 Verify dist Folder
+        run: |
+          echo "=========================================="
+          echo "Generated Build"
+          echo "=========================================="
+
+          ls -lah dist
+
+      - name: ☁️ Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: 🔍 AWS Information
+        run: |
+          echo "=========================================="
+          echo "AWS CLI Version"
+          echo "=========================================="
+
+          aws --version
+
+          echo ""
+          echo "Current AWS Identity"
+
+          aws sts get-caller-identity
+
+      - name: ☁️ Upload Build to S3
+        run: |
+          echo "=========================================="
+          echo "Uploading Files to S3"
+          echo "=========================================="
+
+          aws s3 sync dist s3://${{ secrets.S3_BUCKET_NAME }} --delete
+
+          if [ $? -ne 0 ]; then
+            echo "❌ S3 Upload Failed"
+            exit 1
+          fi
+
+          echo "✅ Upload Completed"
+
+      - name: 🔄 Invalidate CloudFront Cache
+        run: |
+          echo "=========================================="
+          echo "Creating CloudFront Invalidation"
+          echo "=========================================="
+
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"
+
+          if [ $? -ne 0 ]; then
+            echo "❌ CloudFront Invalidation Failed"
+            exit 1
+          fi
+
+          echo "✅ Cache Invalidated"
+
+      - name: 🎉 Deployment Complete
+        run: |
+          echo "=========================================="
+          echo "🎉 FRONTEND DEPLOYMENT SUCCESSFUL"
+          echo "=========================================="
+
+          echo "S3 Bucket:"
+          echo "${{ secrets.S3_BUCKET_NAME }}"
+
+          echo ""
+          echo "CloudFront Distribution:"
+          echo "${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}"
+
+          echo ""
+          echo "Deployment Finished Successfully 🚀"
