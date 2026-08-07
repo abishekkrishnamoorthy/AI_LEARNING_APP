@@ -1,113 +1,226 @@
-name: Deploy Backend
+name: AI Learning Backend CI/CD
 
 on:
   push:
     branches:
       - main
-    paths:
-      - "Backend/**"
 
 jobs:
+  build:
+    name: 🚀 Continuous Integration
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: Backend
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Backend/package-lock.json
+
+      - name: 🔍 Workflow Information
+        run: |
+          echo "======================================"
+          echo "🚀 AI Learning Backend CI Started"
+          echo "======================================"
+
+          echo "Repository : ${{ github.repository }}"
+          echo "Branch     : ${{ github.ref_name }}"
+          echo "Actor      : ${{ github.actor }}"
+          echo "Commit SHA : ${{ github.sha }}"
+          echo "Runner OS  : $RUNNER_OS"
+
+          echo ""
+          echo "Current Directory"
+          pwd
+
+          echo ""
+          echo "Node Version"
+          node -v
+
+          echo ""
+          echo "NPM Version"
+          npm -v
+
+          echo "======================================"
+
+      - name: 📂 Display Backend Files
+        run: |
+          echo "Backend Structure"
+          pwd
+          ls -lah
+
+      - name: 📦 Install Dependencies
+        run: |
+          echo "Installing Packages..."
+          npm ci
+
+          if [ $? -ne 0 ]; then
+            echo "❌ npm install failed"
+            exit 1
+          fi
+
+          echo "✅ Dependencies Installed"
+
+      # Uncomment when available
+
+      # - name: ESLint
+      #   run: npm run lint
+
+      # - name: Run Tests
+      #   run: npm test
+
+      - name: ✅ Build Successful
+        run: |
+          echo "======================================"
+          echo "CI Completed Successfully"
+          echo "======================================"
+
   deploy:
+    name: 🚀 Continuous Deployment
+    needs: build
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
 
-      - name: Deployment Information
-        run: |
-          echo "========================================"
-          echo "🚀 GitHub Actions Deployment Started"
-          echo "========================================"
-          echo "Repository : $GITHUB_REPOSITORY"
-          echo "Branch     : $GITHUB_REF_NAME"
-          echo "Commit SHA : $GITHUB_SHA"
-          echo "Actor      : $GITHUB_ACTOR"
-          echo "Triggered  : $(date)"
-          echo "========================================"
+      - name: 🚀 Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.2
 
-      - name: Deploy Backend to EC2
-        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
+          username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+
           script: |
-            set -e
 
-            echo "========================================"
-            echo "✅ Connected to EC2"
-            echo "========================================"
+            echo "======================================"
+            echo "CONNECTED TO EC2"
+            echo "======================================"
 
-            echo "Current User:"
+            echo "Current User"
             whoami
 
-            echo "Current Directory:"
+            echo ""
+            echo "Current Directory"
             pwd
 
-            echo "Changing to project directory..."
-            cd /home/ubuntu/AI_LEARNING_APP/Backend
+            echo ""
+            echo "Current Date"
+            date
 
-            echo "Current Directory:"
+            echo ""
+            echo "Server Uptime"
+            uptime
+
+            echo "======================================"
+            echo "GO TO PROJECT DIRECTORY"
+            echo "======================================"
+
+            cd ~/AI_LEARNING_APP/Backend || exit 1
+
             pwd
 
-            echo "Listing project files..."
+            echo "======================================"
+            echo "PROJECT FILES"
+            echo "======================================"
+
             ls -lah
 
-            echo "========================================"
-            echo "Current Git Status"
-            echo "========================================"
+            echo "======================================"
+            echo "CURRENT GIT STATUS"
+            echo "======================================"
+
             git status
 
-            echo "Fetching latest code..."
-            git fetch origin
+            echo ""
 
-            echo "Pulling latest code..."
+            git branch
+
+            echo ""
+
+            git log --oneline -5
+
+            echo "======================================"
+            echo "PULL LATEST CODE"
+            echo "======================================"
+
             git pull origin main
 
-            echo "Latest Commit:"
-            git log -1 --oneline
-
-            echo "========================================"
-            echo "Node Environment"
-            echo "========================================"
-            node -v
-            npm -v
-
-            echo "Installing dependencies..."
-            npm install
-
-            echo "========================================"
-            echo "PM2 Status Before Restart"
-            echo "========================================"
-            pm2 list || true
-
-            if pm2 describe learnflow-backend > /dev/null 2>&1; then
-              echo "Restarting existing PM2 process..."
-              pm2 restart learnflow-backend --update-env
-            else
-              echo "PM2 process not found. Starting new process..."
-              pm2 start src/server.js --name learnflow-backend
+            if [ $? -ne 0 ]; then
+              echo "❌ Git Pull Failed"
+              exit 1
             fi
 
-            echo "Saving PM2 process list..."
+            echo "✅ Git Pull Successful"
+
+            echo "======================================"
+            echo "INSTALL DEPENDENCIES"
+            echo "======================================"
+
+            npm install
+
+            if [ $? -ne 0 ]; then
+              echo "❌ npm install Failed"
+              exit 1
+            fi
+
+            echo "✅ npm install Successful"
+
+            echo "======================================"
+            echo "CHECK .ENV FILE"
+            echo "======================================"
+
+            if [ -f ".env" ]; then
+                echo "✅ .env File Found"
+            else
+                echo "❌ .env File Missing"
+                exit 1
+            fi
+
+            echo "======================================"
+            echo "RESTART PM2"
+            echo "======================================"
+
+            pm2 restart learnflow-backend
+
+            if [ $? -ne 0 ]; then
+                echo "❌ PM2 Restart Failed"
+                exit 1
+            fi
+
+            echo "✅ PM2 Restart Successful"
+
             pm2 save
 
-            echo "========================================"
-            echo "PM2 Status After Restart"
-            echo "========================================"
+            echo "======================================"
+            echo "PM2 PROCESS LIST"
+            echo "======================================"
+
             pm2 list
 
-            echo "Application Logs (Last 20 Lines)"
-            pm2 logs learnflow-backend --lines 20 --nostream || true
+            echo "======================================"
+            echo "APPLICATION HEALTH CHECK"
+            echo "======================================"
 
-            echo "========================================"
-            echo "Deployment Completed Successfully"
-            echo "========================================"
+            sleep 5
 
-      - name: Deployment Completed
-        run: |
-          echo "========================================"
-          echo "✅ GitHub Actions Workflow Finished"
-          echo "========================================"
+            curl -I http://127.0.0.1:5001
+
+            echo ""
+
+            echo "======================================"
+            echo "LAST 20 PM2 LOGS"
+            echo "======================================"
+
+            pm2 logs learnflow-backend --lines 20 --nostream
+
+            echo "======================================"
+            echo "DEPLOYMENT COMPLETED SUCCESSFULLY"
+            echo "======================================"
