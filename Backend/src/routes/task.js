@@ -3,7 +3,7 @@ import authMiddleware from "../middlewares/authMiddleware.js";
 import Cycle from "../models/Cycle.js";
 import DailyLog from "../models/DailyLog.js";
 import Resource from "../models/Resource.js";
-import { getGroqClient } from "../services/groqService.js";
+import { getGroqClient, getGroqModel } from "../services/groqService.js";
 import {
   completeTaskAndUnlock,
   findCycleAndDay,
@@ -313,7 +313,7 @@ router.post("/depth/submit", authMiddleware, async (req, res) => {
 
     const groq = getGroqClient();
     const completion = await groq.chat.completions.create({
-      model: "llama-3.1-8b-instant",
+      model: getGroqModel(),
       temperature: 0.2,
       response_format: { type: "json_object" },
       messages: [

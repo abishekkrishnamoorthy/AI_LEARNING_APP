@@ -22,6 +22,10 @@ if (!process.env.GROQ_API_KEY) {
   throw new Error("GROQ_API_KEY is not configured in Backend/.env");
 }
 
+if (!process.env.GROQ_MODEL) {
+  throw new Error("GROQ_MODEL is not configured in Backend/.env");
+}
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || "0.0.0.0";

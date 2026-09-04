@@ -1,32 +1,18 @@
-import Groq from "groq-sdk";
 import internalEvents from "../events/internalEvents.js";
 import Cycle from "../models/Cycle.js";
 import Resource from "../models/Resource.js";
 import Topic from "../models/Topic.js";
+import { getGroqClient, getGroqModel } from "./groqService.js";
 import { selectBestVideo } from "./youtubeSelector.js";
 
-let groqClient = null;
-
-const getGroqClient = () => {
-  if (!process.env.GROQ_API_KEY) {
-    throw new Error("GROQ_API_KEY is not configured");
-  }
-
-  if (!groqClient) {
-    groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
-  }
-
-  return groqClient;
-};
-
-const complete = async ({ model, system, user, json = false }) => {
+const complete = async ({ system, user, json = false }) => {
   const groq = getGroqClient();
   const messages = [];
   if (system) messages.push({ role: "system", content: system });
   messages.push({ role: "user", content: user });
 
   const res = await groq.chat.completions.create({
-    model,
+    model: getGroqModel(),
     messages,
     temperature: 0.3,
     max_completion_tokens: 2048,
@@ -198,7 +184,6 @@ Rules:
 `.trim();
 
   return complete({
-    model: "llama-3.3-70b-versatile",
     system: "You are a curriculum design expert. Return ONLY valid JSON.",
     user: prompt,
     json: true,
@@ -220,7 +205,6 @@ Return JSON object:
 Return ONLY valid JSON.`;
 
   const raw = await complete({
-    model: "llama-3.1-8b-instant",
     system: "Generate high-quality MCQs. Return ONLY valid JSON.",
     user: prompt,
     json: true,

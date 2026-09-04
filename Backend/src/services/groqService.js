@@ -14,3 +14,12 @@ export const getGroqClient = () => {
 
   return groqClient;
 };
+
+export const getGroqModel = () => {
+  const model = process.env.GROQ_MODEL;
+  if (!model) {
+    throw new Error("GROQ_MODEL is missing or empty");
+  }
+
+  return model;
+};

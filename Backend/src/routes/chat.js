@@ -4,7 +4,7 @@ import authMiddleware from "../middlewares/authMiddleware.js";
 import Cycle from "../models/Cycle.js";
 import DailyLog from "../models/DailyLog.js";
 import Topic from "../models/Topic.js";
-import { getGroqClient } from "../services/groqService.js";
+import { getGroqClient, getGroqModel } from "../services/groqService.js";
 
 const router = express.Router();
 
@@ -63,7 +63,7 @@ router.post("/message", authMiddleware, async (req, res) => {
 
     const groq = getGroqClient();
     const stream = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: getGroqModel(),
       messages,
       stream: true,
       max_completion_tokens: 800,

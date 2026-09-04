@@ -1,5 +1,5 @@
 import { google } from "googleapis";
-import { getGroqClient } from "./groqService.js";
+import { getGroqClient, getGroqModel } from "./groqService.js";
 
 let youtubeClient = null;
 
@@ -139,7 +139,7 @@ views: ${video.viewCount.toLocaleString()}`
   try {
     const groq = getGroqClient();
     const res = await groq.chat.completions.create({
-      model: "llama-3.1-8b-instant",
+      model: getGroqModel(),
       max_completion_tokens: 200,
       temperature: 0.1,
       response_format: { type: "json_object" },

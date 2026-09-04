@@ -1,6 +1,6 @@
 import Cycle from "../models/Cycle.js";
 import DailyLog from "../models/DailyLog.js";
-import { getGroqClient } from "./groqService.js";
+import { getGroqClient, getGroqModel } from "./groqService.js";
 
 const parseModelJson = (raw = "{}") => {
   const cleaned = String(raw).replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
@@ -39,7 +39,7 @@ export const generateSummary = async (dailyLogId) => {
 
   const groq = getGroqClient();
   const completion = await groq.chat.completions.create({
-    model: "llama-3.1-8b-instant",
+    model: getGroqModel(),
     temperature: 0.2,
     response_format: { type: "json_object" },
     messages: [

@@ -1,4 +1,4 @@
-import { getGroqClient } from "./groqService.js";
+import { getGroqClient, getGroqModel } from "./groqService.js";
 
 const parseModelJson = (raw = "{}") => {
   const cleaned = String(raw)
@@ -44,7 +44,7 @@ Rules:
 `.trim();
 
   const response = await groq.chat.completions.create({
-    model: "llama-3.1-8b-instant",
+    model: getGroqModel(),
     max_completion_tokens: 1800,
     temperature: 0.2,
     response_format: { type: "json_object" },
@@ -74,7 +74,7 @@ Return JSON object:
 Return ONLY valid JSON.`;
 
   const response = await groq.chat.completions.create({
-    model: "llama-3.1-8b-instant",
+    model: getGroqModel(),
     max_completion_tokens: 1800,
     temperature: 0.2,
     response_format: { type: "json_object" },
