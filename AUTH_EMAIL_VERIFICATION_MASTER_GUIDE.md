@@ -75,7 +75,8 @@ Base backend URL is `VITE_API_BASE_URL` on frontend, default fallback `http://lo
   - If token missing/invalid -> `400`.
   - If matching user already exists in `User`, deletes `TempUser`, returns success.
   - Else creates `User` with `email + hashed password`, then deletes `TempUser`.
-- Success response: `200 { "message": "Email verified successfully" }`.
+- On success, returns an HTML page confirming the email is verified and showing a `Go to Login` link.
+- The login link uses `FRONTEND_BASE_URL`; if unset, it uses the first configured `ALLOWED_ORIGINS` origin, then falls back to `http://localhost:5173`.
 - Error handling:
   - Duplicate key race (`code 11000`) also returns success `200` (idempotent-ish behavior).
 
@@ -145,6 +146,7 @@ Base backend URL is `VITE_API_BASE_URL` on frontend, default fallback `http://lo
 #### `GET /auth/checkstatus` (also alias `/auth/check-verify`)
 - Purpose: polling endpoint for verification status UI.
 - Input: header `x-user-email: user@example.com`.
+- CORS allows this header so the frontend can poll the backend from its configured origin.
 - Status logic:
   - If email in `User` -> `{ verified: true, status: "verified" }`
   - Else if in `TempUser` -> `{ verified: false, status: "pending" }`
@@ -173,8 +175,8 @@ Base backend URL is `VITE_API_BASE_URL` on frontend, default fallback `http://lo
 3. Check permanent `User` duplication.
 4. Hash password.
 5. Upsert `TempUser` with new token and TTL-backed `createdAt`.
-6. Send verification email with `BACKEND_BASE_URL/auth/verify?token=...`.
-7. On verify endpoint hit, promote pending record into `User` and remove `TempUser`.
+6. Send verification email with `<verification-base-url>/auth/verify?token=...`, where `EMAIL_VERIFICATION_BASE_URL` overrides `BACKEND_BASE_URL`.
+7. On verify endpoint hit, promote pending record into `User`, remove `TempUser`, and show the HTML success page with a login link.
 
 #### JWT auth middleware flow
 1. Read `Authorization` header.
@@ -199,7 +201,9 @@ Current service: `Backend/src/services/emailService.js`
   - `BREVO_API_KEY`
   - `EMAIL_USER` (sender)
 - Optional env:
-  - `BACKEND_BASE_URL` (default currently falls back to `http://0.0.0.0:5000`).
+  - `EMAIL_VERIFICATION_BASE_URL` (overrides the verification-link host).
+  - `BACKEND_BASE_URL` (verification-link host fallback; default is `http://0.0.0.0:5000`).
+  - `FRONTEND_BASE_URL` (base URL used by the verification success page's login link).
 - Email contains plain text verification URL.
 
 Error surface:
@@ -261,7 +265,7 @@ Flow details:
 
 Verification UI (`VerifyPanel`):
 - Polls `/auth/checkstatus` every 3 seconds.
-- Shows pending, not_found, or verified state.
+- Shows an initial checking state, then pending, not_found, or verified state; transient request failures are shown while polling retries.
 - On verified: success state then auto-calls `onVerified()` after 2s.
 - Resend button:
   - Calls `/auth/resend`.
@@ -302,7 +306,7 @@ sequenceDiagram
   BE->>DB: Find TempUser by token
   BE->>DB: Create User (if not already exists)
   BE->>DB: Delete TempUser
-  BE-->>U: Email verified successfully
+  BE-->>U: HTML success page with Go to Login link
 
   U->>FE: Submit login form
   FE->>BE: POST /auth/login
@@ -808,6 +812,8 @@ Current backend auth-related env vars (as referenced in code):
 - `BREVO_API_KEY`
 - `EMAIL_USER`
 - `BACKEND_BASE_URL` (optional fallback exists)
+- `EMAIL_VERIFICATION_BASE_URL` (optional override for verification-link host)
+- `FRONTEND_BASE_URL` (optional login-link target; falls back to the first `ALLOWED_ORIGINS` entry)
 
 Current frontend auth-related env vars:
 - `VITE_API_BASE_URL`

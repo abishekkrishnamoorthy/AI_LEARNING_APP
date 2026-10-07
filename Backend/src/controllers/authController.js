@@ -16,6 +16,63 @@ const normalizeEmail = (email) => email.trim().toLowerCase();
 const isValidEmail = (email) => EMAIL_REGEX.test(email);
 const googleClient = new OAuth2Client();
 
+const getLoginUrl = () => {
+  const allowedOrigin = process.env.ALLOWED_ORIGINS?.split(",")
+    .map((origin) => origin.trim())
+    .find(Boolean);
+  const frontendBaseUrl =
+    process.env.FRONTEND_BASE_URL || allowedOrigin || "http://localhost:5173";
+  const loginUrl = new URL("/login", frontendBaseUrl);
+
+  if (!["http:", "https:"].includes(loginUrl.protocol)) {
+    throw new Error("FRONTEND_BASE_URL must use HTTP or HTTPS");
+  }
+
+  return loginUrl.toString();
+};
+
+const escapeHtml = (value) =>
+  value.replace(/[&<>"']/g, (character) => {
+    const entities = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+    return entities[character];
+  });
+
+const sendEmailVerificationSuccess = (res) => {
+  const loginUrl = escapeHtml(getLoginUrl());
+
+  return res.status(200).type("html").send(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Email verified</title>
+    <style>
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; box-sizing: border-box; background: #f7f5fc; color: #302648; font: 16px/1.5 Arial, sans-serif; }
+      main { width: min(100%, 420px); box-sizing: border-box; padding: 36px 28px; border: 1px solid #e6e0f2; border-radius: 18px; background: #fff; box-shadow: 0 18px 44px #3026481a; text-align: center; }
+      .check { width: 56px; height: 56px; display: grid; place-items: center; margin: 0 auto 16px; border: 2px solid #b2e2bf; border-radius: 50%; background: #eaf9ef; color: #1a9a45; font-size: 30px; }
+      h1 { margin: 0; font-size: 26px; }
+      p { margin: 12px 0 24px; color: #6c6391; }
+      a { display: inline-block; border-radius: 10px; padding: 12px 24px; background: #5f84e8; color: #fff; font-weight: 700; text-decoration: none; }
+      a:hover { background: #4e73d9; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="check" aria-hidden="true">&#10003;</div>
+      <h1>Email verified successfully</h1>
+      <p>Your account is ready. Continue to login to start learning.</p>
+      <a href="${loginUrl}">Go to Login</a>
+    </main>
+  </body>
+</html>`);
+};
+
 const getMaxUsers = () => {
   const parsed = Number(process.env.MAX_USERS || DEFAULT_MAX_USERS);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_USERS;
@@ -140,7 +197,7 @@ export const verifyEmail = async (req, res) => {
     const existingUser = await User.findOne({ email: tempUser.email });
     if (existingUser) {
       await TempUser.deleteOne({ _id: tempUser._id });
-      return res.status(200).json({ message: "Email verified successfully" });
+      return sendEmailVerificationSuccess(res);
     }
 
     const availability = await getRegistrationAvailability();
@@ -155,10 +212,10 @@ export const verifyEmail = async (req, res) => {
 
     await TempUser.deleteOne({ _id: tempUser._id });
 
-    return res.status(200).json({ message: "Email verified successfully" });
+    return sendEmailVerificationSuccess(res);
   } catch (error) {
     if (error?.code === 11000) {
-      return res.status(200).json({ message: "Email verified successfully" });
+      return sendEmailVerificationSuccess(res);
     }
     return res.status(500).json({ message: "Email verification failed", error: error.message });
   }

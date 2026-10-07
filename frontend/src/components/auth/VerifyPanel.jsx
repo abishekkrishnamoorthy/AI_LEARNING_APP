@@ -6,11 +6,13 @@ const POLLING_INTERVAL_MS = 3000
 
 function VerifyPanel({ email, onVerified, onClose }) {
   const [isVerified, setIsVerified] = useState(false)
-  const [verifyStatus, setVerifyStatus] = useState('pending')
+  const [verifyStatus, setVerifyStatus] = useState('checking')
+  const [isCheckingStatus, setIsCheckingStatus] = useState(true)
   const [isResending, setIsResending] = useState(false)
   const [cooldown, setCooldown] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
   const verifiedTimeoutRef = useRef(null)
+  const isCheckingRef = useRef(false)
 
   useEffect(() => {
     if (!email || isVerified) {
@@ -20,6 +22,12 @@ function VerifyPanel({ email, onVerified, onClose }) {
     let isActive = true
 
     const checkStatus = async () => {
+      if (isCheckingRef.current) {
+        return
+      }
+
+      isCheckingRef.current = true
+
       try {
         const response = await checkVerifyStatus(email)
         if (!isActive) {
@@ -27,9 +35,12 @@ function VerifyPanel({ email, onVerified, onClose }) {
         }
         const status = response?.data?.status
         const verified = Boolean(response?.data?.verified)
+        setErrorMessage('')
 
         if (status === 'verified' || status === 'pending' || status === 'not_found') {
           setVerifyStatus(status)
+        } else {
+          setErrorMessage('Unexpected response while checking verification status.')
         }
 
         if (verified) {
@@ -37,7 +48,14 @@ function VerifyPanel({ email, onVerified, onClose }) {
         }
       } catch (error) {
         if (isActive) {
-          setErrorMessage(error?.response?.data?.message || 'Unable to check verification status.')
+          setErrorMessage(
+            error?.response?.data?.message || 'Unable to check verification status. Retrying...',
+          )
+        }
+      } finally {
+        isCheckingRef.current = false
+        if (isActive) {
+          setIsCheckingStatus(false)
         }
       }
     }
@@ -127,8 +145,16 @@ function VerifyPanel({ email, onVerified, onClose }) {
               </p>
             ) : (
               <>
-                <p className="verify-status verify-status-pending">Waiting for email verification.</p>
-                <div className="verify-loader" aria-label="Waiting for verification" />
+                <p className="verify-status verify-status-pending">
+                  {isCheckingStatus || verifyStatus === 'checking'
+                    ? 'Checking verification status...'
+                    : 'Waiting for email verification. This status will update automatically.'}
+                </p>
+                <div
+                  className="verify-loader"
+                  role="status"
+                  aria-label="Checking email verification status"
+                />
               </>
             )}
 
@@ -140,7 +166,11 @@ function VerifyPanel({ email, onVerified, onClose }) {
             >
               {isResending ? 'Resending...' : cooldown > 0 ? `Resend Email (${cooldown}s)` : 'Resend Email'}
             </button>
-            {errorMessage ? <p className="status status-error">{errorMessage}</p> : null}
+            {errorMessage ? (
+              <p className="status status-error" role="alert">
+                {errorMessage}
+              </p>
+            ) : null}
           </>
         )}
       </article>
